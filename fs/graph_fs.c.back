@@ -1,0 +1,333 @@
+#ifndef _SLOT_STG_H_
+#define _SLOT_STG_H_
+#include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <time.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <ctype.h>
+
+#include "slots.h"
+
+#define NEFS_MAGIC                                 0xbadd0d0  
+#define NEFS_BLOCK_SIZE                            8192
+#define _1M                                        1048576
+#define _1G                                        1073741824
+
+
+#define min(a,b)             \
+({                           \
+    __typeof__ (a) _a = (a); \
+    __typeof__ (b) _b = (b); \
+    _a < _b ? _a : _b;       \
+})
+
+    
+
+/* All the metadata for nodes and edges in the graph are stored in 
+ * "key-values" and organized in "slots". For this effect, each slot has a 
+ * unique ID -which for our purposes is a sequencial unsigned integer-, and 
+ * an array of key-values -which I will call, a dictionary-, like this:
+ *  ----------------------------------------------------------------------
+ *    SLOT 0: [ key1=value1, k2=myval ]
+ *    SLOT 1: []
+ *    SLOT 2: [ mykey=0, publickey="8w09cfw432f09", distance=32.6435
+ *    SLOT 3: [ mount_host29d9i3="{n:32:localhost:97}", lock="ef4987s2" ]
+ *    SLOT 4: [ Editor="armando" ]
+ *  ----------------------------------------------------------------------
+ *  I am familiar with python, so basically we have an array of dictionaries
+ *  here. So, the next data structures provides an on-disk representation 
+ *  for store this data. 
+ *
+ * For ease of locate for empty slots, a slot index is provided. 
+ * Once a slot is located in the slot index, the slot dictionary can be 
+ * read, updated or removed. 
+ *
+ */
+
+/* kfs_metadata_descriptor_t is a data structure on disk, which keeps all the 
+ * details of the slots -dictionaries- stored.
+ * It should allow:
+ *   -Creation and population into dictionaries slots
+ *   -Read data from slots
+ *   -Updates of data in slots
+ *   -Deletion of data in slots 
+ */
+typedef struct{
+    uint32_t kfs_magic;
+
+#define NEFS_META_MAGIC                            0xb1b1d1
+    uint32_t meta_magic;
+
+    uint64_t slots_count;        /* slots capacity */
+    uint64_t slots_in_use;      
+
+    /* the next two fields points to a kfs_slots_index_descriptor_t
+     * structure on disk. */
+    uint64_t slots_index_block;  /* points to the first index block. 
+                                    If is 0, the slots index starts on 
+                                    this block and slots_index_offset 
+                                    has the start address of the index 
+                                    offset*/
+    uint64_t slots_index_offset; /* points to the first index descriptor,
+                                    which is in this block */
+    
+    uint64_t bmap_extent;        /* points to the block map */ 
+    uint64_t bmap_count;         /* how many blocks are used */
+}kfs_metadata_descriptor_t;
+
+
+/* kfs_slots_index_descriptor_t descripts an index to locate 
+ * slots/dictionaries data easily. One descriptor per block is expected, and
+ * we can know how many slots are stored on this block, how many are free and 
+ * where is the data. 
+ *
+ * Slots are added on demand and also the index. 
+ * Each block should have an index descriptor. */
+typedef struct{ 
+    uint32_t kfs_magic;
+
+    #define NEFS_SLOTS_NDX_MAGIC                   0xbab1d1
+    uint32_t slots_ndx_magic;
+
+
+    uint32_t slots_capacity; /* how many slots we have here */
+    uint32_t slots_seq;      /* from which seq number we are starting */
+    uint32_t slots_in_use;   /* used slots in this block */
+    uint64_t next_block;     /* next block. if 0, this is terminator 
+                                ( no more blocks for index) */
+}kfs_slots_index_descriptor_t;
+
+
+/* Right after the location of a kfs_slots_index_descriptor_t, a lot of 
+ * structures kfs_slots_index_entry_t should be stored. These data 
+ * structures stores the actual location of the dictionary and the slot owner 
+ */
+typedef struct{ /* entry for the slots index. This structure helps to locate
+                   slot data faster */
+    uint64_t slot_id;     /* slot ID. Should be stored in sequence. */
+    uint64_t slot_block;  /* block with this slot entries. Points to
+                             a block with a 
+                             kfs_slots_descriptor_header_t
+                             structure */
+    owner_u owner;        /* owner of this slot */
+    uint32_t flags;       /* the same flags than in slots.h in slot_t*/
+}kfs_slots_index_entry_t;
+
+
+
+typedef struct{
+    uint64_t slot_id;  /* slot ID */
+    uint16_t total_blocks;    /* total of blocks for this slot */
+    uint16_t data_block_seq;  /* which block of the total is this one */ 
+    uint16_t total_elems;  /* total number of elements in the slot */ 
+    uint16_t num_elems; /* number of elements for this slot in this block */
+    uint16_t elems_seq; /* sequence number for the first element  
+                           in this block */
+
+    uint16_t data_offset;  /* offset in bytes to the first kv pair of this 
+                              block. In that place, a kfs_slot_data_t 
+                              should be found */
+
+    uint16_t data_len; /* how many data bytes are used for this slot in this
+                          block. We need this to calculate how many free 
+                          space do we have */
+    uint16_t spare_flags; /* extra room */
+    uint64_t next_block; /* points to the next kfs_slots_descriptor_header 
+                            block with kv pairs belonging to this slot_id. 
+                            If 0, this block is a terminator for this slot, 
+                            mean, all the data for this slot is stored in 
+                            this block */
+}kfs_slot_descriptor_t;
+
+
+typedef struct{
+    uint32_t kfs_magic;
+    #define NEFS_SLOTS_DATABLOCK_MAGIC            0xb00000
+    uint32_t magic;
+    uint32_t slots_num;  /* number of slots on this block. */
+}kfs_slots_descriptor_header_t;
+/* after this header, an array of kfs_slots_descriptor_t data structures 
+ * should be located. 
+ */
+
+typedef struct{
+    uint8_t rec_len;    /* this record size */
+    uint8_t key_len;    /* key size */
+    uint8_t value_type; /* value data type */
+    uint8_t value_len;  /* value data length */
+    uint16_t next_key;  /* offset to the next key. if 0, this is the 
+                          terminator. if 0xffffffff, continues in other 
+                          block */
+
+    uint64_t hash_k;   /* hash for key */
+    char kv_data[];    /* this field should be a blob with a 
+                          zero terminated string, which is the key, followed
+                          immediately with the 
+                          value data */
+
+}kfs_slot_data_t;
+
+typedef struct{
+    int fd;
+
+    sltable_t *tables;
+    int num_cached_tables;
+}slot_storage_t;
+
+/* the filesize should be fixed to mutiples of NEFS_BLOCK_SIZE */
+int kfs_create( char *fname, 
+                 uint64_t fsize,
+                 uint64_t super_nodes_num,
+                 uint64_t slots_num, 
+                 uint64_t bitmap_block_address,
+                 uint64_t );
+
+
+int slots_storage_create( char *fname, uint64_t slots_num,
+                          uint64_t metadata_desc_block,
+                          uint64_t metadata_desc_offs,
+                          uint64_t bmap, uint64_t bmap_count);
+
+int slots_storage_open( char *fname, slot_storage_t *st);
+int slots_storage_close( slot_storage_t *st);
+int slots_resize( slot_storage_t *st, uint64_t slots_num);
+int slots_dump( slot_storage_t *st);
+dict_t slot_read( slot_storage_t *st, uint64_t slot_id);
+int slot_update( slot_storage_t *st, dict_t dict, uint64_t slot_id);
+int slot_delete( slot_storage_t *st, uint64_t slot_id);
+int slots_sync( slot_storage_t *st, uint64_t slot_id);
+
+#endif
+
+int create_file( char *fname){
+    int fd = creat( fname, 0644);
+    if( fd < 0){
+        perror( "ERROR: Could not create file \n");
+        return( -1);
+    }
+    close(fd);
+    return(0);
+}
+
+uint64_t get_bd_device_size( char *fname){
+#ifdef BLKGETSIZE64
+    uint64_t numbytes; 
+    int fd = open( fname, O_RDONLY);
+    if( fd < 0){
+        perror("ERROR: Could not open block device \n");
+        exit( -1);
+    }
+    ioctl( fd, BLKGETSIZE64, &numbytes);
+    close(fd);
+    return( numbytes);
+#else
+    TRACE("ERROR: Operation not supported\n");
+    exit( -1);
+    return(0);
+#endif
+}
+
+
+int kfs_create( char *fname, uint64_t fs_size){
+    struct stat st;
+    int rc;
+    int fd; 
+
+#define NEFS_CREATE_FILE                 0x0001
+#define NEFS_SIZE_SPECIFIED              0x0002
+#define NEFS_IS_BLOCKDEVICE              0x0004
+#define NEFS_IS_REGULAR_FILE             0x0008
+    unsigned int flags = 0x0000; 
+    uint64_t num_blocks;
+    char *p = NULL;
+
+    rc = stat( fname, &st);
+    if( rc != 0){
+        printf("File '%s' does not exist, will create. \n", fname);
+        flags |= NEFS_CREATE_FILE;
+        flags |= NEFS_IS_REGULAR_FILE;
+
+        /* round to the adequate size */
+        num_blocks = fs_size / NEFS_BLOCK_SIZE;
+        fs_size = num_blocks * NEFS_BLOCK_SIZE;
+    }else{
+        if( (! S_ISREG(st.st_mode)) && (! S_ISBLK(st.st_mode))){
+            fprintf( stderr, "ERROR: File is not a regular file nor a ");
+            fprintf( stderr, "block device. Exit. ");
+            return( -1);
+        }  
+
+        if( S_ISREG(st.st_mode)){
+            if( st.st_size > 0){
+                fs_size = (uint64_t) st.st_size;
+            }
+            flags |= NEFS_IS_REGULAR_FILE;
+        }
+
+        if( S_ISBLK(st.st_mode)){
+            fs_size = (uint64_t) get_bd_device_size( fname);
+            flags |= NEFS_IS_BLOCKDEVICE;
+        }
+    }
+
+    printf(" -File system size: %lu Bytes (%lu MBytes, %.2f GBytes)\n",
+        fs_size, fs_size/_1M, (double)fs_size/(double)_1G);
+
+    if( flags & NEFS_CREATE_FILE){
+        rc = create_file(  fname);
+        if( rc != 0){
+            exit( -1);
+        }
+    }
+
+    printf( " -Writing %lu Blocks of %d bytes\n", 
+            num_blocks, NEFS_BLOCK_SIZE);
+    
+    fd = open( fname, O_RDWR );
+    if( fd < 0){
+        perror("ERROR: open error.\n");
+        return( -1);
+    }
+
+    p = malloc( NEFS_BLOCK_SIZE);
+    if( p == NULL){
+        perror( "ERROR: malloc error.\n");
+        close( fd);
+        return( -2);
+    }
+
+    /* Fill the whole file with zeroes */
+    memset( p, 0, NEFS_BLOCK_SIZE);
+    lseek( fd, 0, SEEK_SET);
+    for( int i = 0; i < num_blocks; i++){
+        write( fd, p, NEFS_BLOCK_SIZE);
+        lseek( fd, 0, SEEK_END);
+    }
+    close( fd); 
+    free(p);
+
+    return(0);
+}
+
+int slots_storage_create( char *fname,  
+                          uint64_t slots_num,
+                          uint64_t metadata_desc_block,
+                          uint64_t metadata_desc_offs,
+                          uint64_t bmap,
+                          uint64_t bmap_count){
+    int fd; 
+
+    fd = open( fname, O_RDWR);
+    close(fd);
+
+    return(0);
+}
+
+

@@ -12,10 +12,19 @@ sb_t kfs_sb_create( uint64_t num_inodes, uint64_t num_slots){
     sb.sb_root_super_inode = 0;
 
     sb.sb_extents_cache = NULL;
-    sb.sb_sinodes = { 0 };
-    sb.sb_slots = { 0 };
-    sb.sb_blockmap = { 0 };
+    sb.sb_sinodes.t_capacity = num_inodes;
+    sb.sb_sinodes.t_in_use = 0;
+    sb.sb_sinodes.t_extent = NULL;
+    sb.sb_sinodes.t_cache = NULL;
+
+
+    sb.sb_slots.t_capacity = num_slots;
+    sb.sb_slots.t_in_use = 0;
+    sb.sb_slots.t_extent = NULL;
+    sb.sb_slots.t_cache = NULL;
+
     sb.dev = -1;
+    sb.flags = KFS_RAM_DISK;
 
     return sb;
 }

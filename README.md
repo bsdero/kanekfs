@@ -194,15 +194,15 @@ metadata.
 3. also the super block may have its own dictionary/metadata.
 
 All the features may be used for the next capabilities:
-a. one single global filesystem with different root inodes, kernel and 
+1. one single global filesystem with different root inodes, kernel and 
 binaries, as desired. Useful for clusters, networking, containers, vms.
-b. software and data formats composed of many files, like 3d rendering 
+2. software and data formats composed of many files, like 3d rendering 
 software, package managers, AI models, video games.
-c. Better organization of files for professional working with different 
+3. Better organization of files for professional working with different 
 files related by work units.
-d. Can still be mounted into a standard file system. This solution may support
+4. Can still be mounted into a standard file system. This solution may support
 all the standard posix operations easily.
-e. Vice-versa is also possible, although only the functionality provided by
+5. Vice-versa is also possible, although only the functionality provided by
 the hierarchical file system is possible.
 
 

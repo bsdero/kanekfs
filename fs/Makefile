@@ -3,13 +3,14 @@ CFLAGS=-Wall -DUSER_SPACE
 CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
+TESTS=testdict testrand testhash testdh testgc
 
 objs: $(OBJS)
 
 all: tests
 
 
-tests: objs testdict testrand testhash testdh
+tests: objs $(TESTS)
 
 testdict: testdict.o hash.o dict.o 
 	$(CC) -o testdict testdict.o hash.o dict.o 
@@ -36,7 +37,12 @@ gc.o:
 	$(CC) -c gc.c $(CFLAGS)
 
 clean:
-	rm *.o *.exe
+	@UNAME=`uname|egrep -i "cygwin|windows"`; \
+     if [ "$$UNAME" != "" ]; then             \
+	   rm *.o *.exe;                          \
+	 else                                     \
+	   rm *.o $(TESTS);                       \
+	 fi
 
 
 

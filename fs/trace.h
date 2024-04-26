@@ -25,11 +25,11 @@
 
 #define TRACE_ERRNO(fmt,...)     fprintf( stderr,                           \
                                           "ERRNO: %d:%s: "fmt"\n",          \
-                                          errno, sys_errlist[errno],        \
+                                          errno, strerror( errno),          \
                                           ##__VA_ARGS__);                   \
                                  fflush( stderr)
 
 
-#define TRACE               TRACE_DBG
+#define TRACE                    TRACE_DBG
 
 #endif

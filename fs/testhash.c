@@ -13,7 +13,7 @@ int main(){
 
     do{
         memset( s, 0, 1020);
-        r = gets( s);
+        r = fgets( s, 1020, stdin);
         if( r == NULL){
             break;
         }

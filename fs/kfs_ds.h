@@ -1,5 +1,5 @@
-#ifndef _NEFS_DS_H_
-#define _NEFS_DS_H_
+#ifndef _KFS_DS_H_
+#define _KFS_DS_H_
 
 #include <stdlib.h>
 #include <sys/types.h>
@@ -23,13 +23,13 @@ typedef struct{
     uint64_t sl_sino_owner;
     uint32_t sl_link_owner;
      
-#define SLOT_OWNER_SB                              0x0000
-#define SLOT_OWNER_INO                             0x0001
-#define SLOT_OWNER_LINK                            0x0002
-#define SLOT_OWNER_MASK                            0x000f
+#define SLOT_OWNER_SB            0x0000
+#define SLOT_OWNER_INO           0x0001
+#define SLOT_OWNER_LINK          0x0002
+#define SLOT_OWNER_MASK          0x000f
 
-#define SLOT_IN_USE                                0x0100
-#define SLOT_UPDATE                                0x1000
+#define SLOT_IN_USE              0x0100
+#define SLOT_UPDATE              0x1000
     uint32_t sl_flags;
     dict_t sl_d;
 
@@ -37,15 +37,15 @@ typedef struct{
 }kfs_slot_t;
 
 
-#define NEFS_CACHE_LOADED        0x0001 /* ex_addr has valid data */
-#define NEFS_CACHE_IN_CACHE      0x0002 /* is this element in cache? */
-#define NEFS_CACHE_DIRTY         0x0004 /* dirty? should we sync? */
-#define NEFS_CACHE_EVICT         0x0008 /* remove and free memory */
-#define NEFS_CACHE_ACTIVE        0x0010 /* is this data structure in use? */
-#define NEFS_CACHE_PINNED        0x0020 /* dont remove this from cache */
-#define NEFS_CACHE_FLUSH         0x0040 /* flush to block dev and evict */
+#define KFS_CACHE_LOADED         0x0001 /* ex_addr has valid data */
+#define KFS_CACHE_IN_CACHE       0x0002 /* is this element in cache? */
+#define KFS_CACHE_DIRTY          0x0004 /* dirty? should we sync? */
+#define KFS_CACHE_EVICT          0x0008 /* remove and free memory */
+#define KFS_CACHE_ACTIVE         0x0010 /* is this data structure in use? */
+#define KFS_CACHE_PINNED         0x0020 /* dont remove this from cache */
+#define KFS_CACHE_FLUSH          0x0040 /* flush to block dev and evict */
 
-#define NEFS_CACHE_MASK          0x00ff 
+#define KFS_CACHE_MASK           0x00ff 
 
 
 typedef struct{
@@ -54,13 +54,13 @@ typedef struct{
     uint32_t ex_block_len; /* how many blocks is this extent using */
 
     /* flags for identify which kind of data has this extent */
-#define NEFS_EXT_DATA            0x0100 
-#define NEFS_EXT_EDGES           0x0200
-#define NEFS_EXT_SLOTS           0x0400
-#define NEFS_EXT_SUPERBLOCK      0x0800
-#define NEFS_EXT_SUPERINODES     0x1000
-#define NEFS_EXT_BITMAP          0x2000
-#define NEFS_EXT_DEFAULT         0x4000
+#define KFS_EXT_DATA             0x0100 
+#define KFS_EXT_EDGES            0x0200
+#define KFS_EXT_SLOTS            0x0400
+#define KFS_EXT_SUPERBLOCK       0x0800
+#define KFS_EXT_SUPERINODES      0x1000
+#define KFS_EXT_BITMAP           0x2000
+#define KFS_EXT_DEFAULT          0x4000
     uint32_t ex_flags;
 
     /* last update time */
@@ -82,8 +82,8 @@ typedef struct{
     /* last update time */
     time_t ca_u_time;
 
-#define NEFS_CACHE_DT_LIST       0x01
-#define NEFS_CACHE_DT_BUF        0x02
+#define KFS_CACHE_DT_LIST        0x01
+#define KFS_CACHE_DT_BUF         0x02
     uint16_t ca_flags;
 
 }kfs_cache_t;
@@ -94,14 +94,14 @@ typedef struct kfs_edge_t{
     uint64_t ed_to_super_node; /* which node is this edge pointing to */
     uint64_t ed_hash_name;     /* hash79 */
 
-#define NEFS_EDGE_IS_DENTRY      0x0100 /* is this edge traversable? */
-#define NEFS_EDGE_IS_VISIBLE     0x0200 /* is this edge visible? */
-#define NEFS_EDGE_FULL_CHECK     0x0400 /* hash is not enough, check name */
-#define NEFS_EDGE_SUBINDEX_MASK  0x0001 /* mask for subindex of this edge */     
+#define KFS_EDGE_IS_DENTRY       0x0100 /* is this edge traversable? */
+#define KFS_EDGE_IS_VISIBLE      0x0200 /* is this edge visible? */
+#define KFS_EDGE_FULL_CHECK      0x0400 /* hash is not enough, check name */
+#define KFS_EDGE_SUBINDEX_MASK   0x0001 /* mask for subindex of this edge */     
 
     uint16_t ed_flags;  /* flags for this edge */
-#define NEFS_EDGE_NAME_LEN                         62
-    char ed_name[NEFS_EDGE_NAME_LEN];
+#define KFS_EDGE_NAME_LEN                          62
+    char ed_name[KFS_EDGE_NAME_LEN];
 }kfs_edge_t;
 
 typedef struct{
@@ -122,10 +122,10 @@ typedef struct{
     uint64_t si_id; /* super inode unique ID */
     uint64_t si_data_len; /* file size */
 
-#define NEFS_INDIRECT_SINGLE                      10
-#define NEFS_INDIRECT_DOUBLE                      NEFS_INDIRECT_SINGLE + 1 
-#define NEFS_INDIRECT_TRIPLE                      NEFS_INDIRECT_DOUBLE + 1
-#define NEFS_EXTENTS_NUM                          NEFS_INDIRECT_TRIPLE + 1
+#define KFS_INDIRECT_SINGLE      10
+#define KFS_INDIRECT_DOUBLE      KFS_INDIRECT_SINGLE + 1 
+#define KFS_INDIRECT_TRIPLE      KFS_INDIRECT_DOUBLE + 1
+#define KFS_EXTENTS_NUM          KFS_INDIRECT_TRIPLE + 1
 
     /* for the extents we have a single array. This helps to save as much 
      * space as we can. Also, we have a variable boundary for separate data
@@ -133,10 +133,10 @@ typedef struct{
      *
      * So, the range for type of extents:
      * data:   element 0 to (si_edges_extents_start - 1)
-     * edges:  element si_edges_extents_start to (NEFS_INDIRECT_SINGLE - 1)
+     * edges:  element si_edges_extents_start to (KFS_INDIRECT_SINGLE - 1)
      * indirect single, double and triple have variable boundaries for 
      * edges and data */
-    kfs_extent_t *si_extents[NEFS_EXTENTS_NUM];
+    kfs_extent_t *si_extents[KFS_EXTENTS_NUM];
 
     uint32_t si_edges_extents_start;
     uint32_t si_edges_num;  /* total num of edges */
@@ -204,14 +204,18 @@ typedef struct{
 
     time_t sb_c_time, sb_m_time, sb_a_time; 
 
+#define KFS_RAM_DISK             0x01
+#define KFS_STG_DISK             0x02
+    uint64_t flags;
+
     /* block dev */
     int dev;
 }kfs_sb_t;
 
 
-typedef kfs_slot_t            slot_t;
-typedef kfs_sinode_t          sinode_t;
-typedef kfs_sb_t              sb_t;
+typedef kfs_slot_t               slot_t;
+typedef kfs_sinode_t             sinode_t;
+typedef kfs_sb_t                 sb_t;
     
 
 /* create a file system in memory, inode 0 with no elements, slot 0 

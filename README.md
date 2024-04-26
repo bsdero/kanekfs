@@ -191,7 +191,7 @@ preserved, except:
 1. we have a graph. So any node may be the root node. No exceptions.
 2. relations may be stablished between nodes, and the relations may have 
 metadata.
-4. also the super block may have its own dictionary/metadata.
+3. also the super block may have its own dictionary/metadata.
 
 All the features may be used for the next capabilities:
 a. one single global filesystem with different root inodes, kernel and 

@@ -1,7 +1,7 @@
 # Kanek File System
 ___
 
-## A file system organized in a graph.
+### A file system organized in a graph.
 
 This project is about a file system organized in a cyclic/weighted graph, 
 rather than a hierarchical tree.
@@ -40,7 +40,7 @@ achieve the next goals:
 
 
 ___
-## Hierarchical tree file systems 101
+### Hierarchical tree file systems 101
 
 Before go deep in the concepts and design of a file system organized in a 
 graph, we should review the hierarchical tree approach for organize files in a 
@@ -49,64 +49,53 @@ file system.
 In this hierarchical tree, each "leaf" is what we call as "inode". Each inode 
 may be an actual file, a directory, a link, a device file or another 
 functional element (pipe, socket, soft link, etc). We have a unique, 
-sequential number for identify each inode.
+sequential number for identify each inode. 
 
 Everything is organized inside a "block device", which can be a disk, cdrom, 
 RAM, usb pen drive, a SSD, diskette, and other media. When the kernel 
 performs IO into a block device, it writes whole block of bytes with data.
-
 The blocks may have sizes like 512 bytes, 1k, 2k, 4k and in some cases, 8k.
-
 Usually the block 0 of the device, holds the "superblock" which holds metadata
 of the file system. 
 
-In terms of file systems: 
+In terms of file systems, an inode may be: 
 
-a standard file is an inode with pointers to some blocks with the file data.
-
-a directory is also an inode with pointers to data blocks, but it holds 
+- A standard file, an inode with pointers to some blocks with the file data.
+- A directory, an inode with pointers to data blocks, but it holds 
 "directory entries". Each directory entry has a name and an inode number, 
 thus, it may point to another directory, a file, a link or other. We may 
 imagine a directory as a "folder", which holds files inside.
-
-a link is a directory entry to an object, which already has another directory 
-entry.
-
-device files, sockets, pipes, they are IO channels mapped to a file in the 
+- A link is a directory entry to an object, which already has another directory 
+entry pointing to it.
+- A device file, sockets, pipes, they are IO channels mapped to a file in the 
 file system.
+
+The way to identify an object in a hierarchical tree file system, is using a 
+"path", like /bin/ls, /home/obiwan/document.txt, or /dev/sd0. We can easily 
+locate an object, starting by the root directory "/" and the we traverse the 
+directories, one by one, until we find our file.
 
 The superblock, also holds a pointer to the inode 0, which is the 
 "root directory" of the file system. It is identified by a slash "/". The 
 root directory has entries pointing to other directories like "dev", "etc", 
 "bin", "sbin" or "home".
 
-The way to identify an object in a hierarchical tree file system, is using a 
-"path", like /bin/ls, /home/obiwan/document.txt, or /dev/sd0.
-
-We can easily locate an object, starting by the root directory "/" and the we 
-traverse the directories, one by one, until we find our file.
-
 
 Some sources:
-[https://en.m.wikipedia.org/wiki/File_system](https://en.m.wikipedia.org/wiki/File_system)
-[https://en.m.wikipedia.org/wiki/Hierarchical_file_system](https://en.m.wikipedia.org/wiki/Hierarchical_file_system)
-[https://en.m.wikipedia.org/wiki/Root_directory](https://en.m.wikipedia.org/wiki/Root_directory)
-[https://en.m.wikipedia.org/wiki/Device_file#BLOCKDEV](https://en.m.wikipedia.org/wiki/Device_file#BLOCKDEV)
-[https://en.m.wikipedia.org/wiki/Unix_file_types](https://en.m.wikipedia.org/wiki/Unix_file_types)
+- [https://en.m.wikipedia.org/wiki/File_system](https://en.m.wikipedia.org/wiki/File_system)
+- [https://en.m.wikipedia.org/wiki/Hierarchical_file_system](https://en.m.wikipedia.org/wiki/Hierarchical_file_system)
+- [https://en.m.wikipedia.org/wiki/Root_directory](https://en.m.wikipedia.org/wiki/Root_directory)
+- [https://en.m.wikipedia.org/wiki/Device_file#BLOCKDEV](https://en.m.wikipedia.org/wiki/Device_file#BLOCKDEV)
+- [https://en.m.wikipedia.org/wiki/Unix_file_types](https://en.m.wikipedia.org/wiki/Unix_file_types)
 
 ---
 ## Never Ending File System design 
-
-
-
-
-___
-## Graph File system design
+### Graph File system design
 Good. So, how is a file system organized in a graph, rather than a 
 hierarchical tree?
 
 
-### Super Inode
+#### Super Inode
 Simple. All the nodes in the graph are files and may store data. But the nodes
 can also have "edges", which points to other nodes in the graph.
 
@@ -122,7 +111,7 @@ No distintion between nodes in the file system graph.
 We may call this inode variant as a "super node".
 
 
-## Edges of the nodes
+#### Edges of the nodes
 In the classical file system approach, each directory have 
 "directory entries". They have an entry name, and an inode number, among 
 other data. Also entries for "." and "..", pointing to the current and 
@@ -132,23 +121,19 @@ Well, the edges works exactly like directory entries. But differences are:
 
 1. for each edge in a node A pointing to a node B, we have another edge 
 pointing from B to A. 
-
 2. The ~directory~ edge entries have a shared unique ID (LinkID) for both 
 nodes. We call a couple of edges as a "link". The LinkID is unique in the
 context of connecting nodes, so we can have the same LinkID connecting two 
 different nodes. 
-
 3. the dot and dotdot ( "." and "..") entries are not used at this 
 implementation level.
-
 4. The edges have a flag "traversable". If the edge has this flag enabled, 
 the edge may be traversed through, like in a directory. If not, that means 
 the connecting nodes have just a relation.
-
 5. The edges may have a flag "visible". If disabled, the link connecting 
 nodes is visible only for administrators.
 
-## Extended attributes/metadata
+#### Extended attributes/metadata
 We reserve extra disk space to store key-values for the graph. So, we can 
 have an array of key-values, pretty much like the "hashes" in perl, 
 "collections" in mongoDB or "dictionaries" in python. We will call a set of 
@@ -178,7 +163,7 @@ systems.
 In the slot index, the slot 0 is reserved for the superblock, and the others
 may be used by links
 
-## Files and paths representation
+#### Files and paths representation
 A files graph may be represented by using the traditional hierarchical tree 
 representation, like /boot/kernel-3.4.5/vmlinuz, /home/obiwan/taxes.doc, or 
 /etc/system/named.conf. We may have also a root inode.
@@ -195,34 +180,28 @@ We can use the next approach to specify a link:
 /root/kernel-3.4.5:[LinkID]
 ```
 
-## Super block changes
+#### Super block changes
 For the superblock, most of the information from traditional file systems is 
 preserved, except:
 1. We need to store the extent address information for the Slots Table. 
 2. The root inode for system operation can be any node. 
 
-## With this design we may:
+#### With this design we may:
 
 1. we have a graph. So any node may be the root node. No exceptions.
-
 2. relations may be stablished between nodes, and the relations may have 
 metadata.
+4. also the super block may have its own dictionary/metadata.
 
-3. also the super block may have its own dictionary/metadata.
-
-4. All the features may be used for the next capabilities:
+All the features may be used for the next capabilities:
 a. one single global filesystem with different root inodes, kernel and 
 binaries, as desired. Useful for clusters, networking, containers, vms.
-
 b. software and data formats composed of many files, like 3d rendering 
 software, package managers, AI models, video games.
-
 c. Better organization of files for professional working with different 
 files related by work units.
-
 d. Can still be mounted into a standard file system. This solution may support
 all the standard posix operations easily.
-
 e. Vice-versa is also possible, although only the functionality provided by
 the hierarchical file system is possible.
 

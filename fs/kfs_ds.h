@@ -204,8 +204,6 @@ typedef struct{
 
     time_t sb_c_time, sb_m_time, sb_a_time; 
 
-#define KFS_RAM_DISK             0x01
-#define KFS_STG_DISK             0x02
     uint64_t flags;
 
     /* block dev */
@@ -217,14 +215,7 @@ typedef kfs_slot_t               slot_t;
 typedef kfs_sinode_t             sinode_t;
 typedef kfs_sb_t                 sb_t;
     
-
-/* create a file system in memory, inode 0 with no elements, slot 0 
- * with one element. */
-
-
 /* super block operations */
-sb_t kfs_sb_create( uint64_t num_inodes, uint64_t num_slots);
-void kfs_sb_set_default( kfs_sb_t *kfs_sb);
 void kfs_sb_statfs();
 void kfs_sb_sl_table_dump();
 void kfs_sb_si_table_dump();
@@ -235,11 +226,8 @@ slot_t kfs_sb_alloc_slot(); /* alloc and fill in a slot */
 void kfs_sb_detroy_slot( slot_t *slot); /* undo whatever done in 
                                             kfs_sb_alloc_slot */
 void kfs_sb_sync();
-void kfs_sb_mkfs( char *file_name, uint64_t size_in_mbytes); /* mkfs */
 void kfs_sb_put_super();
-
-
-
+void kfs_sb_get_super( char *file_name);
 void kfs_sb_evict_inode( sinode_t *sinode);
 void kfs_sb_evict_slot( slot_t *slot);
 

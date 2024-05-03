@@ -1,7 +1,7 @@
 #include "kfs_ds.h"
 
 
-sb_t __kfs_sb = { 0 };
+extern sb_t __kfs_sb;
                     
 
 /* super block methods */
@@ -29,12 +29,24 @@ sb_t kfs_sb_create( uint64_t num_inodes, uint64_t num_slots){
     return sb;
 }
 
-/*
-void kfs_sb_set_default( kfs_sb_t *kfs_sb);
-void kfs_sb_statfs();
+void kfs_sb_set_default( kfs_sb_t *kfs_sb){
+    __kfs_sb = *kfs_sb;
+}
+
+void kfs_sb_statfs(){
+    kfs_sb_t sb = __kfs_sb;
+    char disk_type[32];
+
+    printf("KanekFS, A graph file system\n");
+    printf("   Root super inode id=%ul\n", sb.sb_root_super_inode );
+    printf("   Super inodes capacity=%ul\n", sb.sb_sinodes.t_capacity );
+    printf("   Super inodes in use=%ul\n", sb.sb_sinodes.t_in_use );
+    printf("   Slots capacity=%ul\n", sb.sb_slots.t_capacity );
+    printf("   Slots in use=%ul\n", sb.sb_slots.t_in_use );
+}
+
 void kfs_sb_sl_table_dump();
 void kfs_sb_si_table_dump(); 
-*/
 //sinode_t kfs_sb_alloc_sinode(); /* alloc and fill in a super inode */
 //void kfs_sb_destroy_sinode( sinode_t *sinode); /* undo whatever done in
 //                                                kfs_sb_alloc_sinode */

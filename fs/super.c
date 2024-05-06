@@ -24,7 +24,6 @@ sb_t kfs_sb_create( uint64_t num_inodes, uint64_t num_slots){
     sb.sb_slots.t_cache = NULL;
 
     sb.dev = -1;
-    sb.flags = KFS_RAM_DISK;
 
     return sb;
 }

@@ -1,5 +1,5 @@
-#ifndef _KFS_DS_H_
-#define _KFS_DS_H_
+#ifndef _KFS_MEM_H_
+#define _KFS_MEM_H_
 
 #include <stdlib.h>
 #include <sys/types.h>
@@ -20,8 +20,9 @@
 
 /* slots and slot table definition */
 typedef struct{
-    uint64_t sl_sino_owner;
-    uint32_t sl_link_owner;
+    uint64_t slot_id;
+    uint64_t slot_sino_owner;
+    uint32_t slot_link_owner;
      
 #define SLOT_OWNER_SB            0x0000
 #define SLOT_OWNER_INO           0x0001
@@ -30,10 +31,8 @@ typedef struct{
 
 #define SLOT_IN_USE              0x0100
 #define SLOT_UPDATE              0x1000
-    uint32_t sl_flags;
+    uint32_t slot_flags;
     dict_t sl_d;
-
-    uint64_t sl_id;
 }kfs_slot_t;
 
 

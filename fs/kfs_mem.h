@@ -32,8 +32,8 @@ typedef struct{
 #define SLOT_IN_USE              0x0100
 #define SLOT_UPDATE              0x1000
     uint32_t slot_flags;
-    dict_t sl_d;
-}kfs_slot_t;
+    dict_t slot_d;
+}slot_t;
 
 
 #define KFS_CACHE_LOADED         0x0001 /* ex_addr has valid data */
@@ -67,7 +67,7 @@ typedef struct{
 
     /* we should add callbacks for advice the objects owner of this extent
      * when something happened: an eviction, a flush or whatever */
-}kfs_extent_t;
+}extent_t;
 
 /* generic cache structure */
 typedef struct{
@@ -85,11 +85,11 @@ typedef struct{
 #define KFS_CACHE_DT_BUF         0x02
     uint16_t ca_flags;
 
-}kfs_cache_t;
+}cache_t;
 
 
 
-typedef struct kfs_edge_t{
+typedef struct{
     uint64_t ed_to_super_node; /* which node is this edge pointing to */
     uint64_t ed_hash_name;     /* hash79 */
 
@@ -101,13 +101,13 @@ typedef struct kfs_edge_t{
     uint16_t ed_flags;  /* flags for this edge */
 #define KFS_EDGE_NAME_LEN                          62
     char ed_name[KFS_EDGE_NAME_LEN];
-}kfs_edge_t;
+}edge_t;
 
 typedef struct{
     uint64_t li_id;
     uint64_t li_slot_id;
-    kfs_edge_t edges[2];
-}kfs_link_t;
+    edge_t edges[2];
+}link_t;
 
 
 typedef struct{
@@ -135,7 +135,7 @@ typedef struct{
      * edges:  element si_edges_extents_start to (KFS_INDIRECT_SINGLE - 1)
      * indirect single, double and triple have variable boundaries for 
      * edges and data */
-    kfs_extent_t *si_extents[KFS_EXTENTS_NUM];
+    extent_t *si_extents[KFS_EXTENTS_NUM];
 
     uint32_t si_edges_extents_start;
     uint32_t si_edges_num;  /* total num of edges */
@@ -149,7 +149,7 @@ typedef struct{
 
     uint32_t si_mode; 
     uint32_t si_count;
-}kfs_sinode_t; 
+}sinode_t; 
 
 
 
@@ -159,47 +159,47 @@ typedef struct{
 
 /* Graph cache element */
 typedef struct{
-    kfs_edge_t **nd_edges;
+    edge_t **nd_edges;
     uint32_t nd_edges_num;
     uint8_t nd_visited[12]; /* 96 bits for graph searches */
     uint64_t nd_slot_id; 
-    kfs_sinode_t *nd_sinode;
+    sinode_t *nd_sinode;
     time_t nd_lru;
-}kfs_node_t;
+}node_t;
 
 
 typedef struct{
     uint64_t pc_path_hash;
     uint64_t pc_sinode_start;
     uint64_t pc_sinode_end;
-    kfs_edge_t **pc_path;
+    edge_t **pc_path;
     time_t pc_lru;
     uint32_t pc_count;
-}kfs_path_cache_t;
+}path_cache_t;
 
 
 typedef struct{
     uint64_t t_capacity;
     uint64_t t_in_use;
-    kfs_extent_t *t_extent;
-    kfs_cache_t *t_cache;
-}kfs_table_t;
+    extent_t *t_extent;
+    cache_t *t_cache;
+}table_t;
 
 
 typedef struct{
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
 
     /* extents cache */
-    kfs_cache_t *sb_extents_cache;
+    cache_t *sb_extents_cache;
 
     /* super inodes capacity, used inodes, cache, and extents */
-    kfs_table_t sb_sinodes;
+    table_t sb_sinodes;
 
     /* slots capacity, used, cache and extents */
-    kfs_table_t sb_slots;
+    table_t sb_slots;
 
     /* bit map capacity in blocks, taken and extents. Cache is not used. */
-    kfs_table_t sb_blockmap;
+    table_t sb_blockmap;
 
     time_t sb_c_time, sb_m_time, sb_a_time; 
 
@@ -207,12 +207,9 @@ typedef struct{
 
     /* block dev */
     int dev;
-}kfs_sb_t;
+}sb_t;
 
 
-typedef kfs_slot_t               slot_t;
-typedef kfs_sinode_t             sinode_t;
-typedef kfs_sb_t                 sb_t;
     
 /* super block operations */
 void kfs_sb_statfs();

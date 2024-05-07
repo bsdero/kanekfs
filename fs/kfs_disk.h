@@ -84,7 +84,7 @@ typedef struct{
 typedef struct{ 
     uint32_t kfs_magic;
 
-    #define KFS_SLOTS_TABLE_MAGIC                  0xbab1d1
+#define KFS_SLOTS_TABLE_MAGIC                      0xbab1d1
     uint32_t magic;
 
 
@@ -97,9 +97,9 @@ typedef struct{
 
 
 /* Right after the location of a kfs_slots_table_descriptor_t, a lot of 
- * structures kfs_slots_table_entry_t should be stored. These data 
+ * structures kfs_slots_t should be stored. These data 
  * structures stores the actual location of the dictionary and the slot owner.
- * This is the on-disk representation of the kfs_slot_t data type. 
+ * This is the on-disk representation of the slot_t data type. 
  */
 typedef struct{ /* entry for the slots index. This structure helps to locate
                    slot data faster */
@@ -112,10 +112,25 @@ typedef struct{ /* entry for the slots index. This structure helps to locate
                              a block with a 
                              kfs_slots_descriptor_header_t
                              structure */
-fs_slots_table_entry_t; /* size = 32 bytes */
+}kfs_slot_t; /* size = 32 bytes */
 
 
+/* kfs_slots_descriptor_header_t is a block header, which helps to know how 
+ * many slots have data on this block. Also one single block may store data
+ * of one or more slots. */
+typedef struct{
+    uint32_t kfs_magic;
+#define KFS_SLOTS_DATABLOCK_MAGIC                  0xb00000
+    uint32_t magic;
+    uint32_t slots_num;  /* number of slots on this block. */
+}kfs_slots_descriptor_header_t;
+/* after this header, an array of kfs_slots_descriptor_t data structures 
+ * should be located. 
+ */
 
+
+/* kfs_slot_descriptor_t shows how is the slot dictionary stored on disk. 
+ * The slot data may use one or more blocks. */
 typedef struct{
     uint64_t slot_id;  /* slot ID */
 
@@ -143,16 +158,7 @@ typedef struct{
 }kfs_slot_descriptor_t;
 
 
-typedef struct{
-    uint32_t kfs_magic;
-    #define KFS_SLOTS_DATABLOCK_MAGIC              0xb00000
-    uint32_t magic;
-    uint32_t slots_num;  /* number of slots on this block. */
-}kfs_slots_descriptor_header_t;
-/* after this header, an array of kfs_slots_descriptor_t data structures 
- * should be located. 
- */
-
+/* this is the real dictionary data. */
 typedef struct{
     uint8_t rec_len;    /* this record size */
     uint8_t key_len;    /* key size */
@@ -174,7 +180,7 @@ typedef struct{
 
 
 
-typedef struct kfs_edge_t{
+typedef struct{
     uint64_t ed_to_super_node; /* which node is this edge pointing to */
     uint64_t ed_hash_name;     /* hash79 */
 

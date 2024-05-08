@@ -99,8 +99,7 @@ typedef struct{
 #define KFS_EDGE_SUBINDEX_MASK   0x0001 /* mask for subindex of this edge */     
 
     uint16_t ed_flags;  /* flags for this edge */
-#define KFS_EDGE_NAME_LEN                          62
-    char ed_name[KFS_EDGE_NAME_LEN];
+    char *ed_name;
 }edge_t;
 
 typedef struct{

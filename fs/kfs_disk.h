@@ -21,6 +21,42 @@
 #define KFS_MAGIC                                  0x1ba7ba  
 #define KFS_BLOCK_SIZE                             8192
 
+/* Thses are the on-disk structures. To support them, we need some headers 
+ * for store information which can be numbered, like slots, inodes, edges, 
+ * or extents. */
+typedef struct{
+    
+#define KFS_EXTENT_MAGIC                           0xaca771
+
+#define KFS_SINODES_MAGIC                          0xb1b1d1
+#define KFS_SLOTS_MAGIC                            0xbab1d1
+#define KFS_EDGES_MAGIC                            0xb00000
+    uint32_t tb_magic; /* table type */
+    
+    uint16_t tb_entries; /* number of entries here */
+    uint16_t tb_max_entries; /* max capacity of entries */
+
+#define KFS_DATA_ON_PLACE                          0x000001 /* real data is
+                                                               following this
+                                                               data structure*/
+#define KFS_ENTRIES_INDEX                          0x000010 /* we have
+                                                               index entries*/
+#define KFS_ENTRIES_LEAF                           0x000020                     
+    uint16_t tb_flags;
+    uint16_t tb_depth_tree_level; /* how many levels are in the tree below */
+}kfs_table_header_t; 
+
+/*
+ * This is the extent on-disk structure.
+ * It's used at the bottom of the tree.
+ */
+typedef struct{
+    uint64_t ex_block_addr; /* first logical block extent covers */
+    uint16_t ex_blocks_size; /* number of blocks covered by extent */
+    uint16_t ex_logical_size; /* number of logical units */
+    uint32_t ex_log_addr; /* offset in logical units */
+}kfs_extent_t;
+
 
 /* All the metadata for nodes and edges in the graph are stored in 
  * "key-values" and organized in "slots". For this effect, each slot has a 
@@ -160,6 +196,7 @@ typedef struct{
 
 /* this is the real dictionary data. */
 typedef struct{
+    uint64_t hash_k;   /* hash for key */
     uint8_t rec_len;    /* this record size */
     uint8_t key_len;    /* key size */
     uint8_t value_type; /* value data type */
@@ -168,7 +205,6 @@ typedef struct{
                           terminator. if 0xffffffff, continues in other 
                           block */
 
-    uint64_t hash_k;   /* hash for key */
     char kv_data[];    /* this field should be a blob with a 
                           zero terminated string, which is the key, followed
                           immediately with the 
@@ -179,26 +215,33 @@ typedef struct{
 
 
 
+/* enough for slots. Now on to the real file system stuff. */ 
 
+
+
+/* This is 
+ * the edge representation in the block device */
 typedef struct{
-    uint64_t ed_to_super_node; /* which node is this edge pointing to */
-    uint64_t ed_hash_name;     /* hash79 */
-
-#define KFS_EDGE_IS_DENTRY       0x0100 /* is this edge traversable? */
-#define KFS_EDGE_IS_VISIBLE      0x0200 /* is this edge visible? */
-#define KFS_EDGE_FULL_CHECK      0x0400 /* hash is not enough, check name */
-#define KFS_EDGE_SUBINDEX_MASK   0x0001 /* mask for subindex of this edge */     
-
-    uint16_t ed_flags;  /* flags for this edge */
-#define KFS_EDGE_NAME_LEN                          62
-    char ed_name[KFS_EDGE_NAME_LEN];
+    uint64_t ed_link_id; /* link ID */
+    uint64_t ed_sinode; /* which node is this edge pointing to */
+    uint64_t ed_hash;   
+    uint64_t ed_slot_id; /* slot ID */
+    uint16_t ed_rec_len; /* this record total length ( multiple of 8) */
+    uint8_t ed_flags;   /* flags for this edge */
+    uint8_t ed_name_len;
+    char ed_name[];
 }kfs_edge_t;
 
 typedef struct{
-    uint64_t li_id;
-    uint64_t li_slot_id;
-    kfs_edge_t edges[2];
-}kfs_link_t;
+    uint64_t si_id;
+    uint64_t si_slot_id; /* slot ID */
+    time_t si_a_time;
+    time_t si_c_time;
+    time_t si_m_time;
+
+    uint64_t si_data_len; /* file size */
+
+
 
 
 typedef struct{

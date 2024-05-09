@@ -23,25 +23,42 @@
 
 /* Thses are the on-disk structures. To support them, we need some headers 
  * for store information which can be numbered, like slots, inodes, edges, 
- * or extents. */
+ * or extents.
+ *
+ * After a table header, we may have kfs_table_entry_t entries or another
+ * type as well. 
+ * We have three possible cases:
+ *
+ * 1.-If this is the data root, the flag KFS_ENTRIES_ROOT is enabled.  
+ * 2.-If we have data in the same block: the flag KFS_ENTRIES_LEAF is enabled,
+ *    and tb_depth_tree_level = 0. 
+ * 3.-If entries are in other block, the flags KFS_ENTRIES_INDEX is enabled
+ * and tb_depth_level_is > 0.
+ * 4.-The tb_entries and tb_max_entries descripts how many elements we can 
+ * store and how many are used in this block extent.
+ * 5.-Additional data structures descripting data and possible table 
+ * headers are inmediately after the kfs_table_header_t.
+ * 
+ * All the blocks/extents used for store tables data must have a table_header. 
+ */
 typedef struct{
-    
-#define KFS_EXTENT_MAGIC                           0xaca771
 
+/* those magics define what are we dealing with */
+#define KFS_EXTENT_MAGIC                           0xaca771
 #define KFS_SINODES_MAGIC                          0xb1b1d1
 #define KFS_SLOTS_MAGIC                            0xbab1d1
 #define KFS_EDGES_MAGIC                            0xb00000
+#define KFS_SLOT_TABLE_MAGIC                       0xbadd0d0
+
     uint32_t tb_magic; /* table type */
     
-    uint16_t tb_entries; /* number of entries here */
-    uint16_t tb_max_entries; /* max capacity of entries */
+    uint32_t tb_entries_in_use; /* number of used entries here */
+    uint32_t tb_entries_capacity; /* max capacity of entries */
 
-#define KFS_DATA_ON_PLACE                          0x000001 /* real data is
-                                                               following this
-                                                               data structure*/
-#define KFS_ENTRIES_INDEX                          0x000010 /* we have
-                                                               index entries*/
-#define KFS_ENTRIES_LEAF                           0x000020                     
+#define KFS_ENTRIES_ROOT                           0x000001    
+#define KFS_ENTRIES_INDEX                          0x000002
+#define KFS_ENTRIES_LEAF                           0x000004
+    /* we can have extra flags, depending on what are we storing */
     uint16_t tb_flags;
     uint16_t tb_depth_tree_level; /* how many levels are in the tree below */
 }kfs_table_header_t; 
@@ -51,11 +68,11 @@ typedef struct{
  * It's used at the bottom of the tree.
  */
 typedef struct{
-    uint64_t ex_block_addr; /* first logical block extent covers */
-    uint16_t ex_blocks_size; /* number of blocks covered by extent */
-    uint16_t ex_logical_size; /* number of logical units */
-    uint32_t ex_log_addr; /* offset in logical units */
-}kfs_extent_t;
+    uint64_t te_block_addr; /* first logical block extent covers */
+    uint16_t te_blocks_size; /* number of blocks covered by extent */
+    uint16_t te_logical_size; /* number of logical units */
+    uint32_t te_log_addr; /* offset in logical units */
+}kfs_table_entry_t;
 
 
 /* All the metadata for nodes and edges in the graph are stored in 
@@ -77,10 +94,14 @@ typedef struct{
  * Once a slot is located in the slot index, the slot dictionary can be 
  * read, updated or removed. 
  *
+ * STORAGE:
+ * Each dictionary is stored in an extent/table header. 
+ * And the slots index is stored in another exclusive extent. 
  */
 
-/* kfs_metadata_descriptor_t is a data structure on disk, which keeps all the 
- * details of the slots -dictionaries- stored.
+/* kfs_metadata_descriptor_t is a data structure on disk, which, together with
+ * a kfs_table_header_t structure, keeps all the details of the slots 
+ * -dictionaries- stored.
  * It should allow:
  *   -Creation and population into dictionaries slots
  *   -Read data from slots
@@ -88,48 +109,21 @@ typedef struct{
  *   -Deletion of data in slots 
  */
 typedef struct{
-    uint32_t kfs_magic;
-
-#define KFS_META_MAGIC                             0xb1b1d1
-    uint32_t magic;
-
-    uint64_t slots_count;        /* slots capacity */
-    uint64_t slots_in_use;      
-
-    /* the next two fields points to a kfs_slots_table_descriptor_t
-     * structure on disk. */
-    uint64_t slots_index_block;  /* points to the first slots table index 
-                                    block. 
-                                    If is 0, the slots table starts on 
-                                    this block and slots_index_offset 
-                                    has the start address of the index 
-                                    offset*/
-    uint64_t slots_index_offset; /* points to the first index descriptor,
-                                    which is in this block */
-    uint32_t flags;
+    uint64_t total_slots_count;        /* slots capacity */
+    uint64_t total_slots_in_use;
+    uint64_t blocks_count;
 }kfs_metadata_descriptor_t;
 
 
 /* kfs_slots_table_descriptor_t descripts a table to locate 
- * slots/dictionaries data easily. One descriptor per block is expected, and
- * we can know how many slots are stored on this block, how many are free and 
- * where is the data. It works more or less like the standard inodes table.
+ * slots/dictionaries data easily. One descriptor per block/extent is 
+ * expected, and we can know how many slots are stored on this block, how 
+ * many are free and where is the data. It works more or less like the 
+ * standard inodes table.
  *
  * Slots are added on demand and also to the index/slot table. 
  * Each block should have an index descriptor. */
-typedef struct{ 
-    uint32_t kfs_magic;
-
-#define KFS_SLOTS_TABLE_MAGIC                      0xbab1d1
-    uint32_t magic;
-
-
-    uint32_t slots_capacity; /* how many slots we have here */
-    uint32_t slots_seq;      /* from which seq number we are starting */
-    uint32_t slots_in_use;   /* used slots in this block */
-    uint64_t next_block;     /* next block. if 0, this is terminator 
-                                ( no more blocks for index) */
-}kfs_slots_table_descriptor_t;
+typedef kfs_table_entry_t kfs_slots_table_descriptor_t;
 
 
 /* Right after the location of a kfs_slots_table_descriptor_t, a lot of 
@@ -145,24 +139,11 @@ typedef struct{ /* entry for the slots index. This structure helps to locate
     uint32_t slot_flags;  /* the same flags than in slots.h in slot_t*/
 
     uint64_t slot_block;  /* block with this slot entries. Points to
-                             a block with a 
+                             a block with a kfs_table_header_t
+
                              kfs_slots_descriptor_header_t
                              structure */
 }kfs_slot_t; /* size = 32 bytes */
-
-
-/* kfs_slots_descriptor_header_t is a block header, which helps to know how 
- * many slots have data on this block. Also one single block may store data
- * of one or more slots. */
-typedef struct{
-    uint32_t kfs_magic;
-#define KFS_SLOTS_DATABLOCK_MAGIC                  0xb00000
-    uint32_t magic;
-    uint32_t slots_num;  /* number of slots on this block. */
-}kfs_slots_descriptor_header_t;
-/* after this header, an array of kfs_slots_descriptor_t data structures 
- * should be located. 
- */
 
 
 /* kfs_slot_descriptor_t shows how is the slot dictionary stored on disk. 

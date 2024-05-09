@@ -25,18 +25,51 @@
  * for store information which can be numbered, like slots, inodes, edges, 
  * or extents.
  *
- * After a table header, we may have kfs_table_entry_t entries or another
- * type as well. 
- * We have three possible cases:
+ * The kfs_extent_header_t is a data structure designed for descript how is 
+ * data stored in the remaining bytes of this block, or in an group of 
+ * extents.
  *
+ * After a kfs_extent_header_t, we may have kfs_extent_entry_t entries or 
+ * another struct descripting a slots/sinodes table or both. Depends on 
+ * what are we using the extent for, and we know what to read an how depending
+ * on the value in the field 'magic'. 
+ *
+ * So, we can store data directly in the same block or have single, double, 
+ * triple or nth indirect block pointers, which points to extents, conforming
+ * a tree. We can also have a mix, to save disk space. 
+ *
+ * So, how the kfs_extent_header_t data structure works?
+ *
+ * Simple we always have an initial root block. It may store data, so it 
+ * is a leaf block also. If that's the case, no more data is expected than 
+ * we have stored in the same block, and thats all. No pointer, no extents, 
+ * no indirect indexing, nothing. The leafs blocks are also data 
+ * terminators. 
+ *
+ * But the root may reference data in extents of blocks, so it can act as 
+ * an index block. We can have also an index block with pointers to other 
+ * index blocks too.
+ *
+ * In some cases, the root block may have a single extet_entry
+ *
+ * The final blocks or extents, where data is stored are called a "leaf".
+ * Leafs may have organized data as we want, all depends on the "magic"
+ * field of the root block kfs_extent_header_t. No index or pointers 
+ * are expected in a "leaf" block/extent. 
+ *
+ * So, how can we use the extent_header?
+ * 
  * 1.-If this is the data root, the flag KFS_ENTRIES_ROOT is enabled.  
- * 2.-If we have data in the same block: the flag KFS_ENTRIES_LEAF is enabled,
- *    and tb_depth_tree_level = 0. 
- * 3.-If entries are in other block, the flags KFS_ENTRIES_INDEX is enabled
- * and tb_depth_level_is > 0.
- * 4.-The tb_entries and tb_max_entries descripts how many elements we can 
- * store and how many are used in this block extent.
- * 5.-Additional data structures descripting data and possible table 
+ * 2.-If this is a leaf -i.e., we have data in the same block-, the flag
+ *    KFS_ENTRIES_LEAF is enabled and eh_depth_tree_level = 0. 
+ *    The eh_entries_in_use and eh_entries_capacity descripts how many 
+ *    elements we can store and how many are used in this block extent. 
+ *    No more data than stored in this block/extent is expected. 
+ * 3.-If entries are in other blocks/extents, the flag KFS_ENTRIES_INDEX is 
+ *    enabled and eh_depth_level_is > 0. Like the leafs, the eh_entries_in_use
+ *    and eh_entries_capacity fields descripts how many indexing entries
+ *    we may store and how many are used in this block extent. 
+ * 4.-Additional data structures descripting data and possible table 
  * headers are inmediately after the kfs_table_header_t.
  * 
  * All the blocks/extents used for store tables data must have a table_header. 
@@ -45,34 +78,45 @@ typedef struct{
 
 /* those magics define what are we dealing with */
 #define KFS_EXTENT_MAGIC                           0xaca771
-#define KFS_SINODES_MAGIC                          0xb1b1d1
-#define KFS_SLOTS_MAGIC                            0xbab1d1
-#define KFS_EDGES_MAGIC                            0xb00000
-#define KFS_SLOT_TABLE_MAGIC                       0xbadd0d0
 
-    uint32_t tb_magic; /* table type */
     
-    uint32_t tb_entries_in_use; /* number of used entries here */
-    uint32_t tb_entries_capacity; /* max capacity of entries */
+#define KFS_SLOTS_ROOT_MAGIC                       0x0c01a7e
+#define KFS_SLOTS_BITMAP_MAGIC                     0x1a77e
+#define KFS_SLOTS_TABLE_MAGIC                      0xdecaf
+#define KFS_SLOTS_DATA_MAGIC                       0xc0ffee
+
+#define KFS_SINODE_ROOT_MAGIC                      0xc001beb
+#define KFS_SINODE_BITMAP_MAGIC                    0xbad50da
+#define KFS_SINODE_TABLE_MAGIC                     0xcafe
+#define KFS_SINODE_DATA_MAGIC                      0xc0cac01a
+
+#define 
+
+    uint32_t eh_magic; /* table type */
+    
+    uint32_t eh_entries_in_use; /* number of used entries here */
+    uint32_t eh_entries_capacity; /* max capacity of entries */
 
 #define KFS_ENTRIES_ROOT                           0x000001    
 #define KFS_ENTRIES_INDEX                          0x000002
 #define KFS_ENTRIES_LEAF                           0x000004
     /* we can have extra flags, depending on what are we storing */
-    uint16_t tb_flags;
-    uint16_t tb_depth_tree_level; /* how many levels are in the tree below */
-}kfs_table_header_t; 
+    uint16_t eh_flags;
+    uint16_t eh_depth_tree_level; /* how many levels are in the tree below */
+    uint64_t eh_blocks_count;
+}kfs_extent_header_t; 
 
 /*
- * This is the extent on-disk structure.
- * It's used at the bottom of the tree.
- */
+ * This is the extent on-disk structure. It points to other index or leaf 
+ * blocks/extents. */
 typedef struct{
-    uint64_t te_block_addr; /* first logical block extent covers */
-    uint16_t te_blocks_size; /* number of blocks covered by extent */
-    uint16_t te_logical_size; /* number of logical units */
-    uint32_t te_log_addr; /* offset in logical units */
-}kfs_table_entry_t;
+    uint64_t ee_block_addr; /* first logical block extent covers */
+    uint16_t ee_blocks_size; /* number of blocks covered by extent */
+    uint16_t ee_logical_size; /* number of logical units */
+    uint32_t ee_log_addr; /* offset in logical units */
+}kfs_extent_entry_t;
+
+
 
 
 /* All the metadata for nodes and edges in the graph are stored in 
@@ -95,35 +139,34 @@ typedef struct{
  * read, updated or removed. 
  *
  * STORAGE:
- * Each dictionary is stored in an extent/table header. 
- * And the slots index is stored in another exclusive extent. 
+ *
+ * We have a Slot Table stored in indirect extents. And for each slot, we may 
+ * have a single block or an extent to store slot/dictionary data. 
+ *
+ * So, initially we have an extent header with the magic KFS_SLOTS_TABLE_MAGIC
+ * followed by a kfs_metadata_descriptor_t. After that, we have extent_entries
+ * filling the whole block ,which is an index block with pointers to extents 
+ * for the slots table, which may grow on demand. 
  */
 
 /* kfs_metadata_descriptor_t is a data structure on disk, which, together with
- * a kfs_table_header_t structure, keeps all the details of the slots 
- * -dictionaries- stored.
+ * a kfs_table_header_t structure in an extent root block, keeps extra data 
+ * of the slots  -dictionaries- stored.
  * It should allow:
  *   -Creation and population into dictionaries slots
  *   -Read data from slots
  *   -Updates of data in slots
- *   -Deletion of data in slots 
+ *   -Deletion of data in slots
+ *   -Provisioning of extra slots.
+ *
+ *   The kfs_metadata_descriptor_t should be stored inmediately after the 
+ *   kfs_extent_header_t with the magic KFS_SLOTS_TABLE_MAGIC.
  */
 typedef struct{
     uint64_t total_slots_count;        /* slots capacity */
     uint64_t total_slots_in_use;
-    uint64_t blocks_count;
 }kfs_metadata_descriptor_t;
 
-
-/* kfs_slots_table_descriptor_t descripts a table to locate 
- * slots/dictionaries data easily. One descriptor per block/extent is 
- * expected, and we can know how many slots are stored on this block, how 
- * many are free and where is the data. It works more or less like the 
- * standard inodes table.
- *
- * Slots are added on demand and also to the index/slot table. 
- * Each block should have an index descriptor. */
-typedef kfs_table_entry_t kfs_slots_table_descriptor_t;
 
 
 /* Right after the location of a kfs_slots_table_descriptor_t, a lot of 

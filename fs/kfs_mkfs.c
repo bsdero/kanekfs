@@ -1,4 +1,4 @@
-#include "kfs_ds.h"
+#include "kfs_mem.h"
 
 
 sb_t kfs_sb_create( char *file_name, 

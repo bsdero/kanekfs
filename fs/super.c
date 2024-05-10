@@ -1,4 +1,4 @@
-#include "kfs_ds.h"
+#include "kfs_mem.h"
 
 
 extern sb_t __kfs_sb;

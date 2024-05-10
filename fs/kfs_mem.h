@@ -110,7 +110,7 @@ typedef struct{
 
 
 typedef struct{
-    kfs_edge_t **si_edges; /* array of edges of ptrs */
+    edge_t **si_edges; /* array of edges of ptrs */
 
     uint64_t si_slot_id; /* slot ID */
     time_t si_a_time;

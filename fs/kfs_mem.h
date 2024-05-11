@@ -18,23 +18,6 @@
 #include "dict.h"
 
 
-/* slots and slot table definition */
-typedef struct{
-    uint64_t slot_id;
-    uint64_t slot_sino_owner;
-    uint32_t slot_link_owner;
-     
-#define SLOT_OWNER_SB            0x0000
-#define SLOT_OWNER_INO           0x0001
-#define SLOT_OWNER_LINK          0x0002
-#define SLOT_OWNER_MASK          0x000f
-
-#define SLOT_IN_USE              0x0100
-#define SLOT_UPDATE              0x1000
-    uint32_t slot_flags;
-    dict_t slot_d;
-}slot_t;
-
 
 #define KFS_CACHE_LOADED         0x0001 /* ex_addr has valid data */
 #define KFS_CACHE_IN_CACHE       0x0002 /* is this element in cache? */
@@ -46,11 +29,16 @@ typedef struct{
 
 #define KFS_CACHE_MASK           0x00ff 
 
-
+/* this structure maps an extent or segment of an extent in the memory */
 typedef struct{
-    unsigned char *ex_addr; /* block in memory */
-    uint64_t ex_block; /* block addr in block device */
-    uint32_t ex_block_len; /* how many blocks is this extent using */
+    unsigned char *ex_addr; /* extent in memory */
+    uint32_t size; /* how much of extent is in memory */
+    uint64_t offset; /* offset of the real extent */
+    /* data for locate in disk */
+    uint64_t ex_block_addr; /* first logical block extent covers */
+    uint16_t ex_block_size; /* number of blocks covered by extent */
+    uint16_t ex_log_size; /* number of logical units */
+    uint32_t ex_log_addr; /* offset in logical units */
 
     /* flags for identify which kind of data has this extent */
 #define KFS_EXT_DATA             0x0100 
@@ -67,7 +55,28 @@ typedef struct{
 
     /* we should add callbacks for advice the objects owner of this extent
      * when something happened: an eviction, a flush or whatever */
-}extent_t;
+}map_extent_t;
+
+/* slots and slot table definition */
+typedef struct{
+    uint64_t slot_id;
+    uint64_t slot_sino_owner;
+    uint32_t slot_link_owner;
+     
+#define SLOT_OWNER_SB            0x0000
+#define SLOT_OWNER_INO           0x0001
+#define SLOT_OWNER_LINK          0x0002
+#define SLOT_OWNER_MASK          0x000f
+
+#define SLOT_IN_USE              0x0100
+#define SLOT_UPDATE              0x1000
+    uint32_t slot_flags;
+    dict_t slot_d;
+    map_extent_t *extent;
+}slot_t;
+
+
+
 
 /* generic cache structure */
 typedef struct{
@@ -120,23 +129,9 @@ typedef struct{
     uint64_t si_id; /* super inode unique ID */
     uint64_t si_data_len; /* file size */
 
-#define KFS_INDIRECT_SINGLE      10
-#define KFS_INDIRECT_DOUBLE      KFS_INDIRECT_SINGLE + 1 
-#define KFS_INDIRECT_TRIPLE      KFS_INDIRECT_DOUBLE + 1
-#define KFS_EXTENTS_NUM          KFS_INDIRECT_TRIPLE + 1
 
-    /* for the extents we have a single array. This helps to save as much 
-     * space as we can. Also, we have a variable boundary for separate data
-     * from edges in si_edges_extents_start.
-     *
-     * So, the range for type of extents:
-     * data:   element 0 to (si_edges_extents_start - 1)
-     * edges:  element si_edges_extents_start to (KFS_INDIRECT_SINGLE - 1)
-     * indirect single, double and triple have variable boundaries for 
-     * edges and data */
-    extent_t *si_extents[KFS_EXTENTS_NUM];
+    map_extent_t *edges, *data;
 
-    uint32_t si_edges_extents_start;
     uint32_t si_edges_num;  /* total num of edges */
     
 
@@ -180,7 +175,7 @@ typedef struct{
 typedef struct{
     uint64_t t_capacity;
     uint64_t t_in_use;
-    extent_t *t_extent;
+    map_extent_t *t_extent, *t_bitmap;
     cache_t *t_cache;
 }table_t;
 

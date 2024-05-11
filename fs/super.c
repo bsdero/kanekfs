@@ -5,6 +5,7 @@ extern sb_t __kfs_sb;
                     
 
 /* super block methods */
+/*
 sb_t kfs_sb_create( uint64_t num_inodes, uint64_t num_slots){
     sb_t sb;
 
@@ -45,7 +46,8 @@ void kfs_sb_statfs(){
 }
 
 void kfs_sb_sl_table_dump();
-void kfs_sb_si_table_dump(); 
+void kfs_sb_si_table_dump();
+*/
 //sinode_t kfs_sb_alloc_sinode(); /* alloc and fill in a super inode */
 //void kfs_sb_destroy_sinode( sinode_t *sinode); /* undo whatever done in
 //                                                kfs_sb_alloc_sinode */

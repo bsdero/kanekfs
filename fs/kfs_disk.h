@@ -16,6 +16,7 @@
 #include <ctype.h>
 #include "trace.h"
 #include "dict.h"
+#include "kfs_mem.h"
 
 
 #define KFS_MAGIC                                  0x1ba7ba  
@@ -133,7 +134,6 @@ typedef struct{
 //#define KFS_SINODE_TABLE_MAGIC                     0xcafe
 #define KFS_SINODE_DATA_MAGIC                      0xc0cac01a
 
-#define 
 
     uint32_t eh_magic; /* table type */
     
@@ -160,7 +160,7 @@ typedef struct{
     uint32_t ee_log_addr; /* offset in logical units */
 }kfs_extent_entry_t;
 
-
+typedef kfs_extent_entry_t kfs_extent_t;
 
 
 /* All the metadata for nodes and edges in the graph are stored in 
@@ -264,58 +264,32 @@ typedef struct{
 /* Edges are represented also in an extent.
  */
 typedef struct{
-    uint32_t ed_link_id; /* link ID */
-    uint32_t ed_hash_name; 
-    uint64_t ed_sinode; /* which node is this edge pointing to */
+    uint64_t ed_link_id; /* link ID */
     uint64_t ed_slot_id; /* slot ID */
+    
+    uint64_t ed_sinode; /* which node is this edge pointing to */
+    uint32_t ed_hash_name; 
     uint16_t ed_rec_len; /* this record total length ( multiple of 8) */
     uint8_t ed_flags;   /* flags for this edge */
     uint8_t ed_name_len;
     char ed_name[];
 }kfs_edge_t;
 
+/* this is the super inode structure in disk */
 typedef struct{
-    uint64_t si_id;
-    uint64_t si_slot_id; /* slot ID */
+
+    kfs_extent_entry_t edges;  /* extent with edges.*/
+    kfs_extent_entry_t data;   /* extent with file data */
     time_t si_a_time;
     time_t si_c_time;
     time_t si_m_time;
 
-    uint64_t si_data_len; /* file size */
-
-
-
-
-typedef struct{
-    kfs_edge_t **si_edges; /* array of edges of ptrs */
 
     uint64_t si_slot_id; /* slot ID */
-    time_t si_a_time;
-    time_t si_c_time;
-    time_t si_m_time;
-
     uint64_t si_id; /* super inode unique ID */
     uint64_t si_data_len; /* file size */
 
-#define KFS_INDIRECT_SINGLE      10
-#define KFS_INDIRECT_DOUBLE      KFS_INDIRECT_SINGLE + 1 
-#define KFS_INDIRECT_TRIPLE      KFS_INDIRECT_DOUBLE + 1
-#define KFS_EXTENTS_NUM          KFS_INDIRECT_TRIPLE + 1
-
-    /* for the extents we have a single array. This helps to save as much 
-     * space as we can. Also, we have a variable boundary for separate data
-     * from edges in si_edges_extents_start.
-     *
-     * So, the range for type of extents:
-     * data:   element 0 to (si_edges_extents_start - 1)
-     * edges:  element si_edges_extents_start to (KFS_INDIRECT_SINGLE - 1)
-     * indirect single, double and triple have variable boundaries for 
-     * edges and data */
-    kfs_extent_t *si_extents[KFS_EXTENTS_NUM];
-
-    uint32_t si_edges_extents_start;
     uint32_t si_edges_num;  /* total num of edges */
-    
 
     /* cache flags may be used here */
     uint32_t si_flags;
@@ -328,54 +302,39 @@ typedef struct{
 }kfs_sinode_t; 
 
 
-
-
-/* extents, slots, super inodes and graph entries should be cacheables */
-
-
-/* Graph cache element */
 typedef struct{
-    kfs_edge_t **nd_edges;
-    uint32_t nd_edges_num;
-    uint8_t nd_visited[12]; /* 96 bits for graph searches */
-    uint64_t nd_slot_id; 
-    kfs_sinode_t *nd_sinode;
-    time_t nd_lru;
-}kfs_node_t;
-
+    uint64_t st_capacity;
+    uint64_t st_in_use;
+    kfs_extent_t st_bitmap; 
+    kfs_extent_t st_table;
+    cache_t *st_cache;
+}kfs_slot_table_t;
 
 typedef struct{
-    uint64_t pc_path_hash;
-    uint64_t pc_sinode_start;
-    uint64_t pc_sinode_end;
-    kfs_edge_t **pc_path;
-    time_t pc_lru;
-    uint32_t pc_count;
-}kfs_path_cache_t;
-
+    uint64_t si_capacity;
+    uint64_t si_in_use;
+    kfs_extent_t si_bitmap; 
+    kfs_extent_t si_table;
+    cache_t *si_cache;
+}kfs_si_table_t;
 
 typedef struct{
-    uint64_t t_capacity;
-    uint64_t t_in_use;
-    kfs_extent_t *t_extent;
-    kfs_cache_t *t_cache;
-}kfs_table_t;
-
+    uint64_t blocks_capacity;
+    uint64_t blocks_in_use;
+    kfs_extent_t block_map;
+}kfs_blockmap_t;
 
 typedef struct{
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
 
-    /* extents cache */
-    kfs_cache_t *sb_extents_cache;
-
     /* super inodes capacity, used inodes, cache, and extents */
-    kfs_table_t sb_sinodes;
+    kfs_si_table_t sb_si_table;
 
     /* slots capacity, used, cache and extents */
-    kfs_table_t sb_slots;
+    kfs_slot_table_t sb_slot_table;
 
     /* bit map capacity in blocks, taken and extents. Cache is not used. */
-    kfs_table_t sb_blockmap;
+    kfs_blockmap_t blockmap;
 
     time_t sb_c_time, sb_m_time, sb_a_time; 
 
@@ -384,61 +343,6 @@ typedef struct{
     /* block dev */
     int dev;
 }kfs_sb_t;
-
-
-typedef kfs_slot_t               slot_t;
-typedef kfs_sinode_t             sinode_t;
-typedef kfs_sb_t                 sb_t;
-    
-/* super block operations */
-void kfs_sb_statfs();
-void kfs_sb_sl_table_dump();
-void kfs_sb_si_table_dump();
-sinode_t kfs_sb_alloc_sinode(); /* alloc and fill in a super inode */
-void kfs_sb_destroy_sinode( sinode_t *sinode); /* undo whatever done in
-                                                kfs_sb_alloc_sinode */
-slot_t kfs_sb_alloc_slot(); /* alloc and fill in a slot */
-void kfs_sb_detroy_slot( slot_t *slot); /* undo whatever done in 
-                                            kfs_sb_alloc_slot */
-void kfs_sb_sync();
-void kfs_sb_put_super();
-void kfs_sb_get_super( char *file_name);
-void kfs_sb_evict_inode( sinode_t *sinode);
-void kfs_sb_evict_slot( slot_t *slot);
-
-
-/* operations with slots */
-slot_t kfs_slot_alloc();
-slot_t kfs_slot_new();
-slot_t kfs_slot_get( uint64_t slot_id);
-slot_t kfs_slot_get_locked( uint64_t slot_id);
-
-void slot_set_in_use( slot_t *s, int in_use);
-void slot_set_owner_inode( slot_t *s, uint64_t inode);
-void slot_set_owner_inode_edge( slot_t *s, uint64_t inode, uint64_t edge);
-void slot_set_owner_inode_edge_s( slot_t *s, uint64_t inode, char *es);
-void slot_set_dict( slot_t *s, dict_t d);
-
-void kfs_slot_dump( slot_t *slot);
-int kfs_slot_insert_cache( slot_t *slot);
-int kfs_slot_dirty( slot_t *slot);
-int kfs_slot_put( slot_t *slot);
-int kfs_slot_write( slot_t *slot);
-int kfs_slot_evict( slot_t *slot);
-
-/* Operations with super inodes */
-sinode_t kfs_sinode_alloc();
-sinode_t kfs_sinode_new();
-sinode_t kfs_sinode_get( uint64_t sinode_id);
-sinode_t kfs_sinode_get_locked( uint64_t sinode_id);
-int kfs_sinode_insert_cache( sinode_t *sinode);
-int kfs_sinode_dirty( sinode_t *sinode);
-int kfs_sinode_put( sinode_t *sinode);
-int kfs_sinode_write( sinode_t *sinode);
-int kfs_sinode_evict( sinode_t *sinode);
-
-
-
 
 #endif
 

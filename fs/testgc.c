@@ -7,7 +7,6 @@
 
 int main(){
     gc_list_t gcl;
-    char str[] = "dabale arroz a la zorra el abad";
     char *p, *q;
     char str2[128];
 

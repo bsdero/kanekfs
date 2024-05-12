@@ -31,27 +31,22 @@
 
 /* this structure maps an extent or segment of an extent in the memory */
 typedef struct{
-    unsigned char *ex_addr; /* extent in memory */
-    uint32_t size; /* how much of extent is in memory */
-    uint64_t offset; /* offset of the real extent */
-    /* data for locate in disk */
-    uint64_t ex_block_addr; /* first logical block extent covers */
+    /* on disk data structure */
+    uint64_t ex_block_addr; /* first logical block that extent covers */
     uint16_t ex_block_size; /* number of blocks covered by extent */
     uint16_t ex_log_size; /* number of logical units */
     uint32_t ex_log_addr; /* offset in logical units */
 
-    /* flags for identify which kind of data has this extent */
-#define KFS_EXT_DATA             0x0100 
-#define KFS_EXT_EDGES            0x0200
-#define KFS_EXT_SLOTS            0x0400
-#define KFS_EXT_SUPERBLOCK       0x0800
-#define KFS_EXT_SUPERINODES      0x1000
-#define KFS_EXT_BITMAP           0x2000
-#define KFS_EXT_DEFAULT          0x4000
+
+    /* this is for map the data in memory */
+    unsigned char *ex_addr; /* extent in memory */
+    uint32_t size; /* how much of extent is in memory */
+    uint64_t offset; /* offset of the disk extent mapped in memory */
+
+
+#define KFS_EXT_MAPPED           0x1000
     uint32_t ex_flags;
 
-    /* last update time */
-    time_t ex_u_time;
 
     /* we should add callbacks for advice the objects owner of this extent
      * when something happened: an eviction, a flush or whatever */
@@ -72,7 +67,7 @@ typedef struct{
 #define SLOT_UPDATE              0x1000
     uint32_t slot_flags;
     dict_t slot_d;
-    map_extent_t *extent;
+    map_extent_t extent;
 }slot_t;
 
 
@@ -93,23 +88,24 @@ typedef struct{
 #define KFS_CACHE_DT_LIST        0x01
 #define KFS_CACHE_DT_BUF         0x02
     uint16_t ca_flags;
-
 }cache_t;
 
 
 
 typedef struct{
-    uint64_t ed_to_super_node; /* which node is this edge pointing to */
+    uint64_t ed_sinode; /* which node is this edge pointing to */
     uint64_t ed_hash_name;     /* hash79 */
+    char *ed_name;
 
 #define KFS_EDGE_IS_DENTRY       0x0100 /* is this edge traversable? */
 #define KFS_EDGE_IS_VISIBLE      0x0200 /* is this edge visible? */
 #define KFS_EDGE_FULL_CHECK      0x0400 /* hash is not enough, check name */
 #define KFS_EDGE_SUBINDEX_MASK   0x0001 /* mask for subindex of this edge */     
 
-    uint16_t ed_flags;  /* flags for this edge */
-    char *ed_name;
+   uint16_t ed_flags;  /* flags for this edge */
+   uint16_t ed_name_len;
 }edge_t;
+
 
 typedef struct{
     uint64_t li_id;
@@ -119,7 +115,7 @@ typedef struct{
 
 
 typedef struct{
-    edge_t **si_edges; /* array of edges of ptrs */
+    edge_t **si_edges; /* array of pointers to edges */
 
     uint64_t si_slot_id; /* slot ID */
     time_t si_a_time;
@@ -130,7 +126,7 @@ typedef struct{
     uint64_t si_data_len; /* file size */
 
 
-    map_extent_t *edges, *data;
+    map_extent_t edges, data;
 
     uint32_t si_edges_num;  /* total num of edges */
     
@@ -172,13 +168,28 @@ typedef struct{
 }path_cache_t;
 
 
-typedef struct{
-    uint64_t t_capacity;
-    uint64_t t_in_use;
-    map_extent_t *t_extent, *t_bitmap;
-    cache_t *t_cache;
-}table_t;
 
+typedef struct{
+    uint64_t st_capacity;
+    uint64_t st_in_use;
+    map_extent_t st_bitmap; 
+    map_extent_t st_table;
+    cache_t *st_cache;
+}slot_table_t;
+
+typedef struct{
+    uint64_t si_capacity;
+    uint64_t si_in_use;
+    map_extent_t si_bitmap; 
+    map_extent_t si_table;
+    cache_t *si_cache;
+}si_table_t;
+
+typedef struct{
+    uint64_t blocks_capacity;
+    uint64_t blocks_in_use;
+    map_extent_t block_map;
+}blockmap_t;
 
 typedef struct{
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
@@ -187,13 +198,13 @@ typedef struct{
     cache_t *sb_extents_cache;
 
     /* super inodes capacity, used inodes, cache, and extents */
-    table_t sb_sinodes;
+    si_table_t sb_si_table;
 
     /* slots capacity, used, cache and extents */
-    table_t sb_slots;
+    slot_table_t sb_slot_table;
 
     /* bit map capacity in blocks, taken and extents. Cache is not used. */
-    table_t sb_blockmap;
+    blockmap_t blockmap;
 
     time_t sb_c_time, sb_m_time, sb_a_time; 
 
@@ -202,56 +213,6 @@ typedef struct{
     /* block dev */
     int dev;
 }sb_t;
-
-
-    
-/* super block operations */
-void kfs_sb_statfs();
-void kfs_sb_sl_table_dump();
-void kfs_sb_si_table_dump();
-sinode_t kfs_sb_alloc_sinode(); /* alloc and fill in a super inode */
-void kfs_sb_destroy_sinode( sinode_t *sinode); /* undo whatever done in
-                                                kfs_sb_alloc_sinode */
-slot_t kfs_sb_alloc_slot(); /* alloc and fill in a slot */
-void kfs_sb_detroy_slot( slot_t *slot); /* undo whatever done in 
-                                            kfs_sb_alloc_slot */
-void kfs_sb_sync();
-void kfs_sb_put_super();
-void kfs_sb_get_super( char *file_name);
-void kfs_sb_evict_inode( sinode_t *sinode);
-void kfs_sb_evict_slot( slot_t *slot);
-
-
-/* operations with slots */
-slot_t kfs_slot_alloc();
-slot_t kfs_slot_new();
-slot_t kfs_slot_get( uint64_t slot_id);
-slot_t kfs_slot_get_locked( uint64_t slot_id);
-
-void slot_set_in_use( slot_t *s, int in_use);
-void slot_set_owner_inode( slot_t *s, uint64_t inode);
-void slot_set_owner_inode_edge( slot_t *s, uint64_t inode, uint64_t edge);
-void slot_set_owner_inode_edge_s( slot_t *s, uint64_t inode, char *es);
-void slot_set_dict( slot_t *s, dict_t d);
-
-void kfs_slot_dump( slot_t *slot);
-int kfs_slot_insert_cache( slot_t *slot);
-int kfs_slot_dirty( slot_t *slot);
-int kfs_slot_put( slot_t *slot);
-int kfs_slot_write( slot_t *slot);
-int kfs_slot_evict( slot_t *slot);
-
-/* Operations with super inodes */
-sinode_t kfs_sinode_alloc();
-sinode_t kfs_sinode_new();
-sinode_t kfs_sinode_get( uint64_t sinode_id);
-sinode_t kfs_sinode_get_locked( uint64_t sinode_id);
-int kfs_sinode_insert_cache( sinode_t *sinode);
-int kfs_sinode_dirty( sinode_t *sinode);
-int kfs_sinode_put( sinode_t *sinode);
-int kfs_sinode_write( sinode_t *sinode);
-int kfs_sinode_evict( sinode_t *sinode);
-
 
 
 

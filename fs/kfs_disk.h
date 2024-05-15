@@ -20,7 +20,10 @@
 
 
 #define KFS_MAGIC                                  0x1ba7ba  
-#define KFS_BLOCK_SIZE                             8192
+#define _1M                                        1048576
+#define _1G                                        1073741824
+
+
 
 /* Thses are the on-disk structures. To support them, we need some headers 
  * for store information which can be numbered, like slots, inodes, edges, 

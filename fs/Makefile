@@ -3,7 +3,7 @@ CFLAGS=-Wall -DUSER_SPACE
 CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
-TESTS=testdict testrand testhash testdh testgc
+TESTS=testdict testrand testhash testdh testgc testmap
 
 objs: $(OBJS)
 
@@ -26,6 +26,9 @@ testdh: testdh.o dumphex.o
 
 testgc: testgc.o gc.o dumphex.o 
 	$(CC) -o testgc testgc.o gc.o dumphex.o 
+
+testmap: testmap.o map.o 
+	$(CC) -o tetmap testmap.o map.o
 
 dumphex.o:
 	$(CC) -c dumphex.c $(CFLAGS)

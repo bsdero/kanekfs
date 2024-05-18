@@ -28,13 +28,21 @@
 
 int blocks_per_block = (KFS_BLOCKSIZE * KFS_BLOCKSIZE * 8);
 
-
 int display_help(){
     char *help[]={
-        "Usage: kfs_mkfs <file_name> [fs_size]",
+        "Usage: kfs_mkfs [options] file_name",
         "",
-        "    Creates a mxfs filesystem in the specified file name. Works  ",
-        "    with the next conditions:                                    ",
+        "    Options:",
+        "      -f fs_size        File size",
+        "      -i sino_num       Number of Super Inodes",
+        "      -s slot_num       Number of Metadata Slots", 
+        "      -c                Calc number of blocks",
+        "      -r                Dump details about file system",
+        "      -v                Verbose mode",
+        "      -h                Help",
+        "",
+        "    kfs_mkfs creates a kfs filesystem in the specified file name.",
+        "    It works with the next conditions:                           ",
         "                                                                 ",
         "      -If <file_name> does not exist, will use the [fs_size]     ",
         "       argument to create the file.                              ", 
@@ -56,6 +64,16 @@ int display_help(){
         "       filesystem will be created within the block device        ",
         "       capacity.                                                 ",
         "",
+        "      -If [-c] option is specified, nothing is touched, but the  ",
+        "       number of slots, used blocks, and sinodes is displayed for",
+        "       the [fs_size] passed, or for the file detected.", 
+        "",
+        "      -If [-r] is specified, information about the filesystem is ",
+        "       shown", 
+        "",
+        "      -Options [-f, -i, -s, -c] can be used together",
+        "",
+        "",
         "",
         "-------------------",
         NULL
@@ -75,14 +93,12 @@ int display_help(){
 uint64_t validate_size( char *str_size){
     int i;
     int l = strlen( str_size);
-    int is_valid = 1;
     uint64_t uint_size; 
     char *ptr;
     unsigned char last;
     
     for( i = 0; i < (l-1); i++){
         if( ! isdigit( str_size[i])){
-            is_valid = 0;
             return(0);
         }    
     }
@@ -160,8 +176,8 @@ int kfs_create( char *fname, uint64_t fs_size){
         flags |= KFS_IS_REGULAR_FILE;
 
         /* round to the adequate size */
-        num_blocks = fs_size / KFS_BLOCK_SIZE;
-        fs_size = num_blocks * KFS_BLOCK_SIZE;
+        num_blocks = fs_size / KFS_BLOCKSIZE;
+        fs_size = num_blocks * KFS_BLOCKSIZE;
     }else{
         if( (! S_ISREG(st.st_mode)) && (! S_ISBLK(st.st_mode))){
             fprintf( stderr, "ERROR: File is not a regular file nor a ");
@@ -193,7 +209,7 @@ int kfs_create( char *fname, uint64_t fs_size){
     }
 
     printf( " -Writing %lu Blocks of %d bytes\n", 
-            num_blocks, KFS_BLOCK_SIZE);
+            num_blocks, KFS_BLOCKSIZE);
     
     fd = open( fname, O_RDWR );
     if( fd < 0){
@@ -201,7 +217,7 @@ int kfs_create( char *fname, uint64_t fs_size){
         return( -1);
     }
 
-    p = malloc( KFS_BLOCK_SIZE);
+    p = malloc( KFS_BLOCKSIZE);
     if( p == NULL){
         perror( "ERROR: malloc error.\n");
         close( fd);
@@ -209,10 +225,10 @@ int kfs_create( char *fname, uint64_t fs_size){
     }
 
     /* Fill the whole file with zeroes */
-    memset( p, 0, KFS_BLOCK_SIZE);
+    memset( p, 0, KFS_BLOCKSIZE);
     lseek( fd, 0, SEEK_SET);
     for( int i = 0; i < num_blocks; i++){
-        write( fd, p, KFS_BLOCK_SIZE);
+        write( fd, p, KFS_BLOCKSIZE);
         lseek( fd, 0, SEEK_END);
     }
     close( fd); 
@@ -229,18 +245,18 @@ int build_filesystem_in_file( char *fname, uint64_t fs_size ){
     int fd = open( fname, O_RDWR );
     uint64_t i, num_blocks_map;
     char *p, *blockmap;
-    mxfs_superblock_t sb; 
-    mx_inode_t root_i;    
+    kfs_superblock_t sb; 
+    /*mx_inode_t root_i;*/    
     time_t current_time;
     char secret[] = "Good! U found the secret message!! 1234567890";
     uint64_t num_blocks = (uint64_t) (fs_size/KFS_BLOCKSIZE);
     uint64_t num_blocks_4_map = ( fs_size / blocks_per_block) + 1;
     uint64_t blockmap_address = num_blocks - num_blocks_4_map;
 
-    printf(" -Block size: %d, Blocks Num: %u\n",
+    printf(" -Block size: %d, Blocks Num: %lu\n",
         KFS_BLOCKSIZE, num_blocks);
 
-    printf(" -Blockmap size in blocks: %u, Blockmap Adress: ( 0x%x, %u)\n",
+    printf(" -Blockmap size in blocks: %lu, Blockmap Adress: ( 0x%lx, %lu)\n",
         num_blocks_4_map, blockmap_address, blockmap_address);
 
     if( fd < 0){
@@ -264,25 +280,33 @@ int build_filesystem_in_file( char *fname, uint64_t fs_size ){
     }
 
     /* Build the super block */ 
-    memset( (void *) &sb, 0, sizeof( sb));
-    sb.magic_number = MXFS_MAGICNUMBER;
-    sb.flags = 0x0000;
-    sb.block_size = MXFS_BLOCKSIZE;
-    sb.num_inodes = 0;
+/*    memset( (void *) &sb, 0, sizeof( sb));
+    sb.sb_magic = KFS_MAGICNUMBER;
+    sb.sb_flags = 0x0000;
+    sb.sb_blocksize = KFS_BLOCKSIZE;
+    sb.sb_root_super_inode = 0;
+
+
+    sb.sb_si_table.si_capacity = num_sinodes;
+    sb.sb_si_table.si_in_use = 1;
+
+
+
     sb.num_blocks = num_blocks; 
     sb.used_inodes = 1;
-    sb.used_blocks = 2 + num_blocks_4_map; /* blockmap + superblock + 
-                                            * root inode data */
+    sb.used_blocks = 2 + num_blocks_4_map; 
+    * blockmap + superblock + 
+                                            * root inode data 
     sb.block_map = blockmap_address;
     sb.block_map_num = (uint64_t) num_blocks_4_map;
     current_time = time( NULL);
     sb.ctime = (uint64_t) current_time;
     sb.active_root_inode_block = 0;
-    sb.active_root_inode_offset = MXFS_ROOT_INODE_OFFSET;
+    sb.active_root_inode_offset = KFS_ROOT_INODE_OFFSET;
     memset( &sb.spare_bytes, 'x', sizeof( sb.spare_bytes));
     strcpy( sb.spare_bytes, secret);
 
-    /* build the root inode */
+     build the root inode 
     memset( (void *) &root_i, 0, sizeof( root_i));
     root_i.a_time = root_i.c_time = root_i.m_time = current_time; 
     root_i.size = 0;
@@ -293,46 +317,47 @@ int build_filesystem_in_file( char *fname, uint64_t fs_size ){
     root_i.uid = 0;
     root_i.gid = 0;
 
-    /* just 1 block for the root directory info, for start */ 
+     just 1 block for the root directory info, for start  
     root_i.storage.extents.extent[0].b_start = 1;
     root_i.storage.extents.extent[0].b_num = 1;
 
 
-    /* copy the superblock and root inode data to the correct 
-     * place in the memory block */
-    memset( p, 0, MXFS_BLOCKSIZE);
+    copy the superblock and root inode data to the correct 
+    place in the memory block 
+    memset( p, 0, KFS_BLOCKSIZE);
     memcpy( p, &sb, sizeof( sb));
-    memcpy( p + MXFS_ROOT_INODE_OFFSET, &root_i, sizeof( root_i));
+    memcpy( p + KFS_ROOT_INODE_OFFSET, &root_i, sizeof( root_i));
 
-    /* write the whole block to disk */
+    write the whole block to disk 
     lseek( fd, 0, SEEK_SET);
-    write( fd, p, MXFS_BLOCKSIZE);
+    write( fd, p, KFS_BLOCKSIZE);
 
     printf(" -Wrote superblock and root inode\n");
     free( p);
 
+    
 
-    /* almost there, except we need to prepare the block map also. We need to
+    * almost there, except we need to prepare the block map also. We need to
      * mark block 0 as busy, as the superblock and root inode lives there.  
      * Also the block 1 needs to be marked, as the root inode has an extent 
      * pointing there. 
-     * The blockmap used blocks should be marked also. */ 
-    blockmap = malloc( MXFS_BLOCKSIZE * num_blocks_4_map);
+     * The blockmap used blocks should be marked also. *
+    blockmap = malloc( KFS_BLOCKSIZE * num_blocks_4_map);
     if( blockmap == NULL){
         perror( "ERROR: malloc error.\n");
         close( fd);
         return( -1);
     }
 
-    memset( blockmap, 0, MXFS_BLOCKSIZE * num_blocks_4_map);
+    memset( blockmap, 0, KFS_BLOCKSIZE * num_blocks_4_map);
 
-    /* superblock and root inode */
+    * superblock and root inode *
     bm_set_bit( blockmap, num_blocks, (uint64_t) 0, 1);
 
-    /* superblock's data block */
+    * superblock's data block *
     bm_set_bit( blockmap, num_blocks, (uint64_t) 1, 1);
 
-    /* used blocks map */
+    * used blocks map *
     bm_set_extent( blockmap, 
                    num_blocks, 
                    blockmap_address, 
@@ -340,13 +365,14 @@ int build_filesystem_in_file( char *fname, uint64_t fs_size ){
                    1);
 
      
-    lseek( fd, blockmap_address * MXFS_BLOCKSIZE, SEEK_SET);
-    write( fd, blockmap, MXFS_BLOCKSIZE * num_blocks_4_map);
+    lseek( fd, blockmap_address * KFS_BLOCKSIZE, SEEK_SET);
+    write( fd, blockmap, KFS_BLOCKSIZE * num_blocks_4_map);
     
     close( fd);
     free( blockmap);
     printf(" -Wrote blockmap.\n");
     return(0);
+    */
 }
 
 int main( int argc, char **argv){
@@ -413,7 +439,7 @@ int main( int argc, char **argv){
         }
     }
 
-    printf(" -File system size: %u Bytes (%u MBytes, %.2f GBytes)\n",
+    printf(" -File system size: %lu Bytes (%u MBytes, %.2f GBytes)\n",
         fs_size, fs_size/_1M, (double)fs_size/(double)_1G);
 
     if( flags & MKFS_CREATE_FILE){

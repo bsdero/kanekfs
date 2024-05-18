@@ -310,7 +310,6 @@ typedef struct{
     uint64_t st_in_use;
     kfs_extent_t st_bitmap; 
     kfs_extent_t st_table;
-    cache_t *st_cache;
 }kfs_slot_table_t;
 
 typedef struct{
@@ -318,18 +317,21 @@ typedef struct{
     uint64_t si_in_use;
     kfs_extent_t si_bitmap; 
     kfs_extent_t si_table;
-    cache_t *si_cache;
 }kfs_si_table_t;
 
 typedef struct{
-    uint64_t blocks_capacity;
-    uint64_t blocks_in_use;
-    kfs_extent_t block_map;
+    uint64_t bm_blocks_capacity;
+    uint64_t bm_blocks_in_use;
+    kfs_extent_t bm_block_map;
 }kfs_blockmap_t;
 
 typedef struct{
+    uint64_t sb_magic; 
+    uint32_t sb_version;
+    uint32_t sb_flags;
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
-
+    uint64_t sb_blocksize;
+    
     /* super inodes capacity, used inodes, cache, and extents */
     kfs_si_table_t sb_si_table;
 
@@ -337,15 +339,17 @@ typedef struct{
     kfs_slot_table_t sb_slot_table;
 
     /* bit map capacity in blocks, taken and extents. Cache is not used. */
-    kfs_blockmap_t blockmap;
+    kfs_blockmap_t sb_blockmap;
 
-    time_t sb_c_time, sb_m_time, sb_a_time; 
+    time_t sb_c_time;
+    time_t sb_m_time;
+    time_t sb_a_time; 
 
     uint64_t flags;
 
     /* block dev */
     int dev;
-}kfs_sb_t;
+}kfs_superblock_t;
 
 #endif
 

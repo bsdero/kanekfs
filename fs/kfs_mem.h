@@ -17,7 +17,7 @@
 #include "trace.h"
 #include "dict.h"
 
-#define KFS_BLOCK_SIZE                             8192
+#define KFS_BLOCKSIZE                             8192
 
 #define KFS_CACHE_LOADED         0x0001 /* ex_addr has valid data */
 #define KFS_CACHE_IN_CACHE       0x0002 /* is this element in cache? */

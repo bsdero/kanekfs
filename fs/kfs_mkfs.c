@@ -28,16 +28,18 @@
 
 int blocks_per_block = (KFS_BLOCKSIZE * KFS_BLOCKSIZE * 8);
 
+
 int display_help(){
     char *help[]={
         "Usage: kfs_mkfs [options] file_name",
         "",
         "    Options:",
-        "      -f fs_size        File size",
+        "      -s fs_size        File size",
         "      -i sino_num       Number of Super Inodes",
-        "      -s slot_num       Number of Metadata Slots", 
-        "      -c                Calc number of blocks",
-        "      -r                Dump details about file system",
+        "      -n slot_num       Number of Metadata Slots", 
+        "      -c                Calc number of items",
+        "      -d                Dump details about file system",
+        "      -p percentage     super inodes and slots percentage", 
         "      -v                Verbose mode",
         "      -h                Help",
         "",
@@ -59,20 +61,30 @@ int display_help(){
         "",
         "      -If <file_name> is a block device, will create a filesystem",
         "       within the file capacity, except the [fs_size] argument   ",
-        "       is specified. If this is the case, the fs_size should be  ",
+        "       is specified. If this is the case, the [fs_size] should be",
         "       lesser than or equal the block device capacity, and the   ",
         "       filesystem will be created within the block device        ",
         "       capacity.                                                 ",
         "",
         "      -If [-c] option is specified, nothing is touched, but the  ",
-        "       number of slots, used blocks, and sinodes is displayed for",
-        "       the [fs_size] passed, or for the file detected.", 
+        "       number of slots, super inodes, blocks, etc required, is   ",
+        "       shown. If the [fs_size] is passed, and/or the size        ",
+        "       detected, the number of slots and superinodes and used    ",
+        "       blocks are shown. If the [sino_num] or [slot_num] of both ",
+        "       are passed, the calculations showns the number of blocks  ", 
+        "       and device size which is required for that calculations.  ",
         "",
-        "      -If [-r] is specified, information about the filesystem is ",
+        "      -If [-p] is specified, that percentage is used for the     ",
+        "       super inodes and slots. The default is about 12%. It needs",
+        "       to know the disk size before, so it can be used with -s   ",
+        "       and -c.",
+        "",
+        "      -If [-d] is specified, information about the filesystem is ",
         "       shown", 
         "",
-        "      -Options [-f, -i, -s, -c] can be used together",
-        "",
+        "      -Options [-s, -i, -n, -c] can be used together.",
+        "",       
+        "      <bsdero@gmail.com>",
         "",
         "",
         "-------------------",
@@ -86,7 +98,6 @@ int display_help(){
 
     return(0);
 }
-
 
 
 
@@ -375,6 +386,103 @@ int build_filesystem_in_file( char *fname, uint64_t fs_size ){
     */
 }
 
+typedef struct{
+    char filename[240];
+    char str_size[32];
+    char str_slots_num[24];
+    char str_sinodes_num[24];
+    char str_percentage[10];
+    uint64_t sinodes_num;
+    uint64_t slots_num;
+    uint64_t size;
+    int percentage;
+    int flags;
+}options_t;
+
+
+int parse_opts( int argc, char **argv, options_t *options){
+    int opt, flags; 
+
+#define OPT_SIZE                         0x0001
+#define OPT_NUM_SLOTS                    0x0002
+#define OPT_NUM_SINODES                  0x0004
+#define OPT_CALCULATE                    0x0008
+#define OPT_DUMP                         0x0010
+#define OPT_PERCENTAGE                   0x0020
+#define OPT_VERBOSE                      0x0040
+#define OPT_HELP                         0x0080
+
+    flags = 0;
+    char opc[] = "s:i:n:cdp:vh";
+    memset( (void *) options, 0, sizeof( options_t));
+
+    if( argc == 0){
+        fprintf(stderr, "ERROR: invalid number of arguments.\n");
+        display_help();
+        exit( EXIT_FAILURE);
+    }      
+
+    
+    while ((opt = getopt(argc, argv, opc )) != -1) {
+        switch (opt) {
+            case 's':
+                flags |= OPT_SIZE;
+                strcpy( options->str_size, optarg);
+                break;
+            case 'i':
+                flags |= OPT_NUM_SINODES;
+                strcpy( options->str_sinodes_num, optarg);
+                break;
+            case 'n':
+                flags |= OPT_NUM_SLOTS;
+                strcpy( options->str_slots_num, optarg);
+                break;
+            case 'p':
+                flags |= OPT_PERCENTAGE;
+                strcpy( options->str_percentage, optarg);
+                break;
+            case 'd':
+                flags |= OPT_DUMP;
+                break;
+            case 'v':
+                flags |= OPT_VERBOSE;
+                break;
+            case 'c':
+                flags |= OPT_CALCULATE;
+                break;
+            case 'h':
+                flags |= OPT_HELP;
+                break;
+            default: /* '?' */
+                fprintf(stderr, "ERROR: invalid argument.\n");
+                display_help();
+                exit(EXIT_FAILURE);
+        }
+    }
+
+    if (optind >= argc) {
+        fprintf(stderr, "Expected argument after options\n");
+        display_help();
+        exit(EXIT_FAILURE);
+    }
+
+    strcpy( options->filename, argv[optind]);
+    options->flags = flags;
+
+    printf("Filename=<%s>\n", options->filename);
+    printf("SSize=<%s>\n", options->str_size);
+    printf("SSInodesNum=<%s>\n", options->str_sinodes_num);
+    printf("SSlotsNum=<%s>\n", options->str_slots_num);
+    printf("SPercentage=<%s>\n", options->str_percentage);
+    printf("Size=<%lu>\n", options->size);
+    printf("SInodesNum=<%lu>\n", options->sinodes_num);
+    printf("SlotsNum=<%lu>\n", options->slots_num);
+    printf("Percentage=<%d>\n", options->percentage);
+    printf("Flags=<0x%x>\n", options->flags);
+
+    return flags;
+}
+
 int main( int argc, char **argv){
     char *fname;
     char *ssize;
@@ -383,6 +491,7 @@ int main( int argc, char **argv){
     uint64_t fs_size; 
     uint64_t num_blocks;
     uint64_t num_blocks_4_map; 
+    options_t opts;
 
 #define MKFS_CREATE_FILE                 0x0001
 #define MKFS_SIZE_SPECIFIED              0x0002
@@ -391,12 +500,8 @@ int main( int argc, char **argv){
 
     unsigned int flags = 0x0000; 
 
-    if( argc < 2 || argc > 3){
-        fprintf( stderr, "ERROR: Number of arguments not valid\n");
-        display_help();
-        return( -1);
-    }
-
+    flags = parse_opts( argc, argv, &opts);
+    exit(0);
    
     if( argc == 3){
         fs_size = validate_size( argv[2]);

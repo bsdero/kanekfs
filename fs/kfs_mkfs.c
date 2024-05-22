@@ -59,6 +59,13 @@ int display_help(){
         "          size, the filesystem will be created within the file   ",
         "          capacity.                                              ",
         "",
+        "      -For the [-s fs_size], the expected value is the size in   ",
+        "       MBytes. Also the characters 'M' and 'G' after the number  ",
+        "       specifies if we refer to MBytes or GBytes. Examples:      ",
+        "       20    20 MByes,                                           ",
+        "       512M  512 MBytes,                                         ",
+        "       8G    8 GBytes                                            ", 
+        "",
         "      -If <file_name> is a block device, will create a filesystem",
         "       within the file capacity, except the [fs_size] argument   ",
         "       is specified. If this is the case, the [fs_size] should be",
@@ -135,6 +142,24 @@ uint64_t validate_size( char *str_size){
     }
 
     return(0);
+}
+
+
+uint64_t validate_num( char *str_size){
+    int i;
+    int l = strlen( str_size);
+    uint64_t uint; 
+    char *ptr;
+    unsigned char last;
+    
+    for( i = 0; i < l; i++){
+        if( ! isdigit( str_size[i])){
+            return(0);
+        }    
+    }
+
+    uint = strtoul( str_size, &ptr, 10);
+    return( uint_size);
 }
 
 
@@ -412,6 +437,11 @@ int parse_opts( int argc, char **argv, options_t *options){
 #define OPT_VERBOSE                      0x0040
 #define OPT_HELP                         0x0080
 
+#define MKFS_CREATE_FILE                 0x0100
+#define MKFS_IS_BLOCKDEVICE              0x0200
+#define MKFS_IS_REGULAR_FILE             0x0400
+
+
     flags = 0;
     char opc[] = "s:i:n:cdp:vh";
     memset( (void *) options, 0, sizeof( options_t));
@@ -460,61 +490,51 @@ int parse_opts( int argc, char **argv, options_t *options){
         }
     }
 
+    /* if help required, display help and exit, no errors */
+    if( flags == OPT_HELP){
+        display_help();
+        exit( 0);
+    }
+
+    /* last argument missing, error .*/
     if (optind >= argc) {
         fprintf(stderr, "Expected argument after options\n");
         display_help();
         exit(EXIT_FAILURE);
     }
 
+    /* cases for invalid options combination */
+    if(  ( flags & OPT_HELP) || /* any option with -h */
+         ( flags == OPT_VERBOSE) ||   /* -v alone */
+         ( flags & ~( OPT_DUMP | OPT_VERBOSE)) ||  /* -d and -v with any extra
+                                                    flags */
+
+         /* -p and -i, or -p and -n can not go together */
+         ( flags & ( OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
+         ( flags & ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ||
+
+         /* other invalid comabinations of options */
+         ( flags & ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SINODES)) ||
+         ( flags & ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SLOTS)) 
+        ){
+        fprintf( stderr, "Invalid options combination.\n");
+        display_help();
+        exit( EXIT_FAILURE);
+    }
+
     strcpy( options->filename, argv[optind]);
     options->flags = flags;
 
-    printf("Filename=<%s>\n", options->filename);
-    printf("SSize=<%s>\n", options->str_size);
-    printf("SSInodesNum=<%s>\n", options->str_sinodes_num);
-    printf("SSlotsNum=<%s>\n", options->str_slots_num);
-    printf("SPercentage=<%s>\n", options->str_percentage);
-    printf("Size=<%lu>\n", options->size);
-    printf("SInodesNum=<%lu>\n", options->sinodes_num);
-    printf("SlotsNum=<%lu>\n", options->slots_num);
-    printf("Percentage=<%d>\n", options->percentage);
-    printf("Flags=<0x%x>\n", options->flags);
-
-    return flags;
-}
-
-int main( int argc, char **argv){
-    char *fname;
-    char *ssize;
-    struct stat st;
-    int rc;
-    uint64_t fs_size; 
-    uint64_t num_blocks;
-    uint64_t num_blocks_4_map; 
-    options_t opts;
-
-#define MKFS_CREATE_FILE                 0x0001
-#define MKFS_SIZE_SPECIFIED              0x0002
-#define MKFS_IS_BLOCKDEVICE              0x0004
-#define MKFS_IS_REGULAR_FILE             0x0008
-
-    unsigned int flags = 0x0000; 
-
-    flags = parse_opts( argc, argv, &opts);
-    exit(0);
-   
-    if( argc == 3){
-        fs_size = validate_size( argv[2]);
-        if( fs_size == 0){
-            fprintf( stderr, "ERROR: Size not valid\n");
-            display_help();
-            return( -1);
-        }
-        if( fs_size < 20971520){
-            fprintf( stderr, "ERROR: Invalid size, minimum is 20MBytes\n");
-            return( -1);
-        }
-        flags |= MKFS_SIZE_SPECIFIED;
+    if( options-
+    options->size = validate_size( options->str_size);
+    if( options->size == 0){
+        fprintf( stderr, "ERROR: Size not valid\n");
+        display_help();
+        return( -1);
+    }
+    if( options->size < 20971520){
+        fprintf( stderr, "ERROR: Invalid size, minimum is 20MBytes\n");
+        return( -1);
     }
 
 
@@ -553,7 +573,43 @@ int main( int argc, char **argv){
             exit( -1);
         }
     }
-  
+ 
+
+    printf("Filename=<%s>\n", options->filename);
+    printf("SSize=<%s>\n", options->str_size);
+    printf("SSInodesNum=<%s>\n", options->str_sinodes_num);
+    printf("SSlotsNum=<%s>\n", options->str_slots_num);
+    printf("SPercentage=<%s>\n", options->str_percentage);
+    printf("Size=<%lu>\n", options->size);
+    printf("SInodesNum=<%lu>\n", options->sinodes_num);
+    printf("SlotsNum=<%lu>\n", options->slots_num);
+    printf("Percentage=<%d>\n", options->percentage);
+    printf("Flags=<0x%x>\n", options->flags);
+
+    return flags;
+}
+
+int main( int argc, char **argv){
+    char *fname;
+    char *ssize;
+    struct stat st;
+    int rc;
+    uint64_t fs_size; 
+    uint64_t num_blocks;
+    uint64_t num_blocks_4_map; 
+    options_t opts;
+
+#define MKFS_CREATE_FILE                 0x0001
+#define MKFS_SIZE_SPECIFIED              0x0002
+#define MKFS_IS_BLOCKDEVICE              0x0004
+#define MKFS_IS_REGULAR_FILE             0x0008
+
+    unsigned int flags = 0x0000; 
+
+    flags = parse_opts( argc, argv, &opts);
+    exit(0);
+   
+ 
     rc = build_filesystem_in_file( fname, fs_size); 
     if( rc != 0){
         fprintf( stderr, "ERROR: Failed to build a filesystem\n");

@@ -345,6 +345,11 @@ typedef struct{
     time_t sb_m_time;
     time_t sb_a_time; 
 
+
+#define KFS_SB_SINODES_NUM_FIXED                   0x0001
+#define KFS_SB_SLOTS_NUM_FIXED                     0x0002
+#define KFS_SB_AUTO_DEFRAG                         0x0004
+    
     uint64_t flags;
 
     /* block dev */

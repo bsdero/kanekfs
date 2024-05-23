@@ -254,7 +254,7 @@ int main(){
     uint64_t count_result[16], addr[16], eaddr[16]; 
     int test_id = 0;
     
-    memset( &global_results, sizeof( int) * TESTS_NUM, 0);
+    memset( &global_results, 0, sizeof( int) * TESTS_NUM);
 
     /********************************************************************
      * SET BIT IN BYTE TESTS

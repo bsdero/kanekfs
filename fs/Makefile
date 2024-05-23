@@ -5,11 +5,11 @@ SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 TESTS=testdict testrand testhash testdh testgc testmap
 TOOLS=mkfs
-objs: $(OBJS)
+
 
 all: tests tools
 
-
+objs: $(OBJS)
 tests: objs $(TESTS)
 tools: objs $(TOOLS)
 
@@ -33,7 +33,7 @@ testgc: testgc.o gc.o dumphex.o
 	$(CC) -o testgc testgc.o gc.o dumphex.o 
 
 testmap: testmap.o map.o 
-	$(CC) -o tetmap testmap.o map.o
+	$(CC) -o testmap testmap.o map.o
 
 dumphex.o:
 	$(CC) -c dumphex.c $(CFLAGS)

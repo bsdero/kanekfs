@@ -94,7 +94,7 @@ int display_help(){
         "      <bsdero@gmail.com>",
         "",
         "",
-        "-------------------",
+        "-------------------------------------------------------------------",
         NULL
     };
 
@@ -150,7 +150,6 @@ uint64_t validate_num( char *str_size){
     int l = strlen( str_size);
     uint64_t uint; 
     char *ptr;
-    unsigned char last;
     
     for( i = 0; i < l; i++){
         if( ! isdigit( str_size[i])){
@@ -159,7 +158,7 @@ uint64_t validate_num( char *str_size){
     }
 
     uint = strtoul( str_size, &ptr, 10);
-    return( uint_size);
+    return( uint);
 }
 
 
@@ -427,6 +426,9 @@ typedef struct{
 
 int parse_opts( int argc, char **argv, options_t *options){
     int opt, flags; 
+    struct stat st;
+    int rc;
+
 
 #define OPT_SIZE                         0x0001
 #define OPT_NUM_SLOTS                    0x0002
@@ -441,6 +443,7 @@ int parse_opts( int argc, char **argv, options_t *options){
 #define MKFS_IS_BLOCKDEVICE              0x0200
 #define MKFS_IS_REGULAR_FILE             0x0400
 
+#define MKFS_DEFAULT_PERCENTAGE          10
 
     flags = 0;
     char opc[] = "s:i:n:cdp:vh";
@@ -506,16 +509,21 @@ int parse_opts( int argc, char **argv, options_t *options){
     /* cases for invalid options combination */
     if(  ( flags & OPT_HELP) || /* any option with -h */
          ( flags == OPT_VERBOSE) ||   /* -v alone */
-         ( flags & ~( OPT_DUMP | OPT_VERBOSE)) ||  /* -d and -v with any extra
-                                                    flags */
 
+         /* -d and -v with any extra flags */
+         ( (flags & ( OPT_DUMP)) && ~( flags & (OPT_DUMP | OPT_VERBOSE))) || 
+                                                                                                              
          /* -p and -i, or -p and -n can not go together */
-         ( flags & ( OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
-         ( flags & ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ||
+         ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SINODES)) == 
+                    (OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
+         ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ==
+                    ( OPT_PERCENTAGE | OPT_NUM_SLOTS))||
 
          /* other invalid comabinations of options */
-         ( flags & ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SINODES)) ||
-         ( flags & ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SLOTS)) 
+         (( flags & ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SINODES)) ==
+                    ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SINODES))  ||
+         (( flags & ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SLOTS)) ==
+                    ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SLOTS)) 
         ){
         fprintf( stderr, "Invalid options combination.\n");
         display_help();
@@ -525,25 +533,66 @@ int parse_opts( int argc, char **argv, options_t *options){
     strcpy( options->filename, argv[optind]);
     options->flags = flags;
 
-    if( options-
-    options->size = validate_size( options->str_size);
-    if( options->size == 0){
-        fprintf( stderr, "ERROR: Size not valid\n");
-        display_help();
-        return( -1);
+    if( options->flags & OPT_SIZE){
+        options->size = validate_size( options->str_size);
+        if( options->size == 0){
+            fprintf( stderr, "ERROR: Size not valid\n");
+            display_help();
+            return( -1);
+        }
+        if( options->size < 20971520){
+            fprintf( stderr, "ERROR: Invalid size, minimum is 20MBytes\n");
+            return( -1);
+        }
     }
-    if( options->size < 20971520){
-        fprintf( stderr, "ERROR: Invalid size, minimum is 20MBytes\n");
-        return( -1);
+
+   if( options->flags & OPT_PERCENTAGE){
+        options->percentage = validate_num( options->str_percentage);
+        if( options->percentage < 2 || options->percentage > 90 ){
+            fprintf( stderr, "ERROR: Percentage not valid. Valid range is ");
+            fprintf( stderr, "[2-90]\n");
+            display_help();
+            return( -1);
+        }
+    }else{
+        options->percentage = MKFS_DEFAULT_PERCENTAGE;
     }
 
 
-    fname = argv[1];
-    rc = stat( fname, &st);
+
+    if( options->flags & OPT_NUM_SINODES){
+        options->sinodes_num = validate_num( options->str_sinodes_num);
+        if( options->sinodes_num == 0){
+            fprintf( stderr, "ERROR: SInodes num not valid\n");
+            display_help();
+            return( -1);
+        }
+    }
+    if( options->flags & OPT_NUM_SLOTS){
+        options->slots_num = validate_num( options->str_slots_num);
+        if( options->slots_num == 0){
+            fprintf( stderr, "ERROR: Slots num not valid\n");
+            display_help();
+            return( -1);
+        }
+    }
+
+
+    rc = stat( options->filename, &st);
     if( rc != 0){
-        printf("File '%s' does not exist, will create. \n", fname);
-        flags |= MKFS_CREATE_FILE;
-        flags |= MKFS_IS_REGULAR_FILE;         
+        if( ( options->flags & OPT_CALCULATE) || 
+            ( options->flags & OPT_DUMP)){
+            fprintf( stderr, "ERROR: File does not exist.\n");
+            display_help();
+            return( -1);
+        }
+
+        if( (options->flags & OPT_CALCULATE) == 0 ){
+            printf("File '%s' does not exist, will create. \n", 
+                    options->filename);
+            options->flags |= MKFS_CREATE_FILE;
+            options->flags |= MKFS_IS_REGULAR_FILE;
+        }
     }else{
         if( (! S_ISREG(st.st_mode)) && (! S_ISBLK(st.st_mode))){
             fprintf( stderr, "ERROR: File is not a regular file nor a ");
@@ -553,27 +602,23 @@ int parse_opts( int argc, char **argv, options_t *options){
 
         if( S_ISREG(st.st_mode)){
             if( st.st_size > 0){
-                fs_size = (uint64_t) st.st_size;
+                options->size = (uint64_t) st.st_size;
             }
-            flags |= MKFS_IS_REGULAR_FILE;
+            options->flags |= MKFS_IS_REGULAR_FILE;
         }
 
         if( S_ISBLK(st.st_mode)){
-            fs_size = (uint64_t) get_bd_device_size( fname);
-            flags |= MKFS_IS_BLOCKDEVICE;
+            options->size = (uint64_t) get_bd_device_size( options->filename);
+            options->flags |= MKFS_IS_BLOCKDEVICE;
         }
     }
 
-    printf(" -File system size: %lu Bytes (%u MBytes, %.2f GBytes)\n",
-        fs_size, fs_size/_1M, (double)fs_size/(double)_1G);
-
-    if( flags & MKFS_CREATE_FILE){
-        rc = create_file(  fname);
-        if( rc != 0){
-            exit( -1);
-        }
-    }
+    printf(" -File system size: %lu Bytes (%lu MBytes, %.2f GBytes)\n",
+        options->size, options->size/_1M, (double)options->size/(double)_1G);
  
+
+ //   rc = calculate_values( options);
+
 
     printf("Filename=<%s>\n", options->filename);
     printf("SSize=<%s>\n", options->str_size);
@@ -585,6 +630,7 @@ int parse_opts( int argc, char **argv, options_t *options){
     printf("SlotsNum=<%lu>\n", options->slots_num);
     printf("Percentage=<%d>\n", options->percentage);
     printf("Flags=<0x%x>\n", options->flags);
+
 
     return flags;
 }
@@ -599,10 +645,6 @@ int main( int argc, char **argv){
     uint64_t num_blocks_4_map; 
     options_t opts;
 
-#define MKFS_CREATE_FILE                 0x0001
-#define MKFS_SIZE_SPECIFIED              0x0002
-#define MKFS_IS_BLOCKDEVICE              0x0004
-#define MKFS_IS_REGULAR_FILE             0x0008
 
     unsigned int flags = 0x0000; 
 

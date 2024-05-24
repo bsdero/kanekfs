@@ -199,11 +199,9 @@ typedef kfs_extent_entry_t kfs_extent_t;
  * and one extent per dictionary/slot. 
  *
  * The metadata descriptor is a "root flower" block, with the field
- * extent_header.magic=KFS_SLOTS_TABLE_MAGIC. An extent entry follows the 
- * header, with the address of a slots extent. After that we have the metadata
- * descriptor with all the data required for the slots table and slots 
- * operation, and finally the initial slots of the data structure, beginning
- * with the slot 0. 
+ * extent_header.magic=KFS_SLOTS_TABLE_MAGIC. It has two extent entries 
+ * pointing to both the bitmap extent and slots extent. After that we have the
+ * the initial slots of the data structure, beginning with the slot 0. 
  *
  */
 

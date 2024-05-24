@@ -423,12 +423,73 @@ typedef struct{
     int flags;
 }options_t;
 
+typedef struct{
+    uint64_t sinodes_num;
+    uint64_t slots_num;
+    uint64_t file_size_in_mbytes;
+    uint64_t file_size_in_blocks;
+    uint64_t bitmap_size_in_blocks;
+    uint64_t slots_table_in_blocks;
+    uint64_t sinodes_table_in_blocks;
+    uint64_t blocks_required;
+    uint16_t result;
+    uint16_t percentage;
+}blocks_calc_t;
+
+
+int blocks_calc( blocks_calc_t *bc){
+    uint64_t total_blocks_required = 0;
+    uint64_t slots_blocks;
+    uint64_t slots_map_blocks;
+    uint64_t slots_per_block;
+    uint64_t slots_in_1st_block;
+    uint64_t blocks_for_slots, blocks_for_sinodes;
+    uint64_t slots_calc, sinodes_calc, n; 
+
+    /* the metadata descriptor is unique. So the first block has the 
+     * kfs_metadata_descriptor_t whicn includes the required data 
+     * structures for handle the slots. following we have the slots. */
+    n = KFS_BLOCKSIZE - sizeof( kfs_metadata_descriptor_t);
+    slots_in_1st_block = n / sizeof( kfs_slot_t);
+
+    n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
+    slots_per_block = n / sizeof( kfs_slot_t);
+    
+
+
+    total_blocks_required += 1; /* super block */
+    if( bc->percentage != 0){
+        /* calculate how many slots and inodes should be used */
+        blocks_for_slots = (bc->file_size_in_blocks * 100) / bc->percentage;
+        slots_map_blocks = ( blocks_for_slots / blocks_per_block) + 1;
+        blocks_for_slots -= slots_map_blocks;
+        slots_calc = slots_in_1st_block + 
+                     ( blocks_for_slots * slots_per_block);
+
+
+
+    }
+
+    if( bc->slots_num != 0){
+        /* calculate how many slots per block */
+        slots_blocks = bc->slots_num / ( bc->slots_num - slots_in_1st_block);
+        slots_blocks += 1; /* remaining slots need one block */
+        slots_blocks += 1; /* also first slots */
+
+        /* how many blocks does our slots map require */
+        slots_map_blocks = bc->slots_num / blocks_per_block; 
+
+        /* now sum up the slots total */ 
+        total_blocks_required += slots_blocks; 
+        total_blocks_required += slots_map_blocks;
+    }
+}
 
 int parse_opts( int argc, char **argv, options_t *options){
     int opt, flags; 
     struct stat st;
     int rc;
-
+    blocks_calc_t bc;
 
 #define OPT_SIZE                         0x0001
 #define OPT_NUM_SLOTS                    0x0002
@@ -517,13 +578,8 @@ int parse_opts( int argc, char **argv, options_t *options){
          ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SINODES)) == 
                     (OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
          ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ==
-                    ( OPT_PERCENTAGE | OPT_NUM_SLOTS))||
+                    ( OPT_PERCENTAGE | OPT_NUM_SLOTS))
 
-         /* other invalid comabinations of options */
-         (( flags & ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SINODES)) ==
-                    ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SINODES))  ||
-         (( flags & ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SLOTS)) ==
-                    ( OPT_CALCULATE | OPT_SIZE | OPT_NUM_SLOTS)) 
         ){
         fprintf( stderr, "Invalid options combination.\n");
         display_help();
@@ -611,14 +667,12 @@ int parse_opts( int argc, char **argv, options_t *options){
             options->size = (uint64_t) get_bd_device_size( options->filename);
             options->flags |= MKFS_IS_BLOCKDEVICE;
         }
+
+        options->flags |= OPT_SIZE;
     }
 
     printf(" -File system size: %lu Bytes (%lu MBytes, %.2f GBytes)\n",
         options->size, options->size/_1M, (double)options->size/(double)_1G);
- 
-
- //   rc = calculate_values( options);
-
 
     printf("Filename=<%s>\n", options->filename);
     printf("SSize=<%s>\n", options->str_size);
@@ -630,6 +684,29 @@ int parse_opts( int argc, char **argv, options_t *options){
     printf("SlotsNum=<%lu>\n", options->slots_num);
     printf("Percentage=<%d>\n", options->percentage);
     printf("Flags=<0x%x>\n", options->flags);
+
+    memset( &bc, 0, sizeof( bc));
+    bc.file_size_in_blocks = options->size / KFS_BLOCKSIZE;
+    bc.file_size_in_mbytes = options->size / _1M;
+ 
+    if( options->flags & OPT_NUM_SINODES || 
+        options->flags & OPT_NUM_SLOTS){
+        
+        bc.sinodes_num = options->sinodes_num; 
+        bc.slots_num = options->slots_num;
+    }else if( options->flags & OPT_PERCENTAGE){
+        bc.percentage = options->percentage; 
+    }
+
+    rc = blocks_calc( &bc);
+
+    if( options->flags & OPT_CALCULATE){
+        blocks_calc_display( &bc);
+        exit( 0);
+    }
+ 
+
+
 
 
     return flags;

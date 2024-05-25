@@ -26,8 +26,7 @@
 })
 #endif
 
-int blocks_per_block = (KFS_BLOCKSIZE * KFS_BLOCKSIZE * 8);
-
+uint64_t blocks_per_block = KFS_BLOCKSIZE * 8;
 
 int display_help(){
     char *help[]={
@@ -276,7 +275,6 @@ int kfs_create( char *fname, uint64_t fs_size){
 int build_filesystem_in_file( char *fname, uint64_t fs_size ){
 
 #define KFS_ROOT_INODE_OFFSET          256
-
     int fd = open( fname, O_RDWR );
     uint64_t i, num_blocks_map;
     char *p, *blockmap;
@@ -424,65 +422,130 @@ typedef struct{
 }options_t;
 
 typedef struct{
-    uint64_t sinodes_num;
-    uint64_t slots_num;
-    uint64_t file_size_in_mbytes;
-    uint64_t file_size_in_blocks;
-    uint64_t bitmap_size_in_blocks;
-    uint64_t slots_table_in_blocks;
-    uint64_t sinodes_table_in_blocks;
-    uint64_t blocks_required;
-    uint16_t result;
-    uint16_t percentage;
+    uint64_t in_sinodes_num;
+    uint64_t in_slots_num;
+    uint64_t in_file_size_in_mbytes;
+    uint64_t in_file_size_in_blocks;
+    uint64_t in_percentage;
+    uint64_t out_bitmap_size_in_blocks;
+    uint64_t out_slots_table_in_blocks, out_slots_bitmap_blocks_num;
+    uint64_t out_sinodes_table_in_blocks, out_sinodes_bitmap_blocks_num;
+    uint64_t out_sinodes_num, out_slots_num;
+    uint64_t out_total_blocks_required;
+    int result;
 }blocks_calc_t;
+
+int blocks_calc_display( blocks_calc_t *bc){
+    printf("IN:\n");
+    printf("   InodesNum=%lu\n", bc->in_sinodes_num);
+    printf("   SlotsNum=%lu\n", bc->in_slots_num);
+    printf("   FileSizeInMB=%lu\n", bc->in_file_size_in_mbytes);
+    printf("   FileSizeInBlocks=%lu\n", bc->in_file_size_in_blocks);
+    printf("   Percentage=%d\n", bc->in_percentage);
+    printf("OUT:\n");
+    printf("   TotalBlocksRequired=%lu\n", bc->out_total_blocks_required);
+    printf("   TotalDiskRequiredInMB=%lu\n",
+               (_1M / KFS_BLOCKSIZE) * bc->out_total_blocks_required);
+    printf("   BitmapSizeInBlocks=%lu\n", bc->out_bitmap_size_in_blocks);
+
+    printf("   InodesNum=%lu\n", bc->out_sinodes_num);
+    printf("   SlotsNum=%lu\n", bc->out_slots_num);
+    printf("   SlotsTableInBlocks=%lu, SlotsMapInBlocks=%lu\n", 
+        bc->out_slots_table_in_blocks, bc->out_slots_bitmap_blocks_num);
+    printf("   SinodesTableInBlocks=%lu, SinodesMapInBlocks=%lu\n", 
+        bc->out_sinodes_table_in_blocks, bc->out_sinodes_bitmap_blocks_num);
+}
 
 
 int blocks_calc( blocks_calc_t *bc){
-    uint64_t total_blocks_required = 0;
-    uint64_t slots_blocks;
-    uint64_t slots_map_blocks;
-    uint64_t slots_per_block;
-    uint64_t slots_in_1st_block;
-    uint64_t blocks_for_slots, blocks_for_sinodes;
-    uint64_t slots_calc, sinodes_calc, n; 
+    uint64_t total_blocks_required = 0, bitmap_size_in_blocks = 0;
+    uint64_t slots_in_1st_block, slots_per_block;
+    uint64_t slots_blocks, slots_map_blocks, slots_result;
+    uint64_t sinodes_in_1st_block, sinodes_per_block;
+    uint64_t sinodes_blocks, sinodes_map_blocks, sinodes_result;
+
+    uint64_t bits_per_block, n;
 
     /* the metadata descriptor is unique. So the first block has the 
      * kfs_metadata_descriptor_t whicn includes the required data 
-     * structures for handle the slots. following we have the slots. */
+     * structures for handle the slots. The metadata descriptor includes the
+     * header, and after that we have the slots. */
     n = KFS_BLOCKSIZE - sizeof( kfs_metadata_descriptor_t);
     slots_in_1st_block = n / sizeof( kfs_slot_t);
 
+    /* the other slots blocks/extents have a extent header and more slots.
+     * So we need to know how many slots we can store per block */
     n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
     slots_per_block = n / sizeof( kfs_slot_t);
-    
+
+    n = KFS_BLOCKSIZE - sizeof( kfs_sinodes_descriptor_t);
+    sinodes_in_1st_block = n / sizeof( kfs_slot_t);
+
+    /* the other slots blocks/extents have a extent header and more slots.
+     * So we need to know how many slots we can store per block */
+    n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
+    sinodes_per_block = n / sizeof( kfs_slot_t);
+ 
+
+    /* now calculate how many bits per block can have our bitmap */
+    bits_per_block = n * 8;
 
 
     total_blocks_required += 1; /* super block */
-    if( bc->percentage != 0){
-        /* calculate how many slots and inodes should be used */
-        blocks_for_slots = (bc->file_size_in_blocks * 100) / bc->percentage;
-        slots_map_blocks = ( blocks_for_slots / blocks_per_block) + 1;
-        blocks_for_slots -= slots_map_blocks;
-        slots_calc = slots_in_1st_block + 
-                     ( blocks_for_slots * slots_per_block);
+    if( bc->in_percentage != 0){
+        /* calculate how many slots ara available, from the file size 
+         * in blocks  */
+
+        /* calculate how many blocks for slots have we */
+        slots_blocks = (bc->in_file_size_in_blocks * 100) / bc->in_percentage;
+        sinodes_blocks = slots_blocks;  /* same for sinodes table blocks */
+
+        /* how many blocks our slots map need */
+        slots_map_blocks = ( slots_blocks / bits_per_block) + 1;
+
+        /* real number of blocks for slots we have */
+        slots_blocks -= slots_map_blocks;
+
+        /* now get the real slots number we can have */
+        slots_result = slots_in_1st_block + ( slots_blocks * slots_per_block);
+
+        /* add up to the total of required blocks */
+        total_blocks_required += slots_result;
 
 
+        bc->out_slots_bitmap_blocks_num = slots_map_blocks;
+        bc->out_slots_table_in_blocks = slots_blocks;
+        bc->out_slots_num = slots_result;
 
+        /* calculate how many super inodes are available, from the file size 
+         * in blocks  */
+ 
+        /* how many blocks our super inodes map need */
+        sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + 1;
+
+        /* real number of blocks for super inodes we have */
+        sinodes_blocks -= sinodes_map_blocks;
+
+        /* now get the real super inodes number we can have */
+        sinodes_result = sinodes_in_1st_block + 
+                       ( sinodes_blocks * sinodes_per_block);
+
+        /* add up to the total of required blocks */
+        total_blocks_required += sinodes_result;
+
+
+        bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
+        bc->out_sinodes_table_in_blocks = sinodes_blocks;
+        bc->out_sinodes_num = sinodes_result;
     }
 
-    if( bc->slots_num != 0){
-        /* calculate how many slots per block */
-        slots_blocks = bc->slots_num / ( bc->slots_num - slots_in_1st_block);
-        slots_blocks += 1; /* remaining slots need one block */
-        slots_blocks += 1; /* also first slots */
 
-        /* how many blocks does our slots map require */
-        slots_map_blocks = bc->slots_num / blocks_per_block; 
 
-        /* now sum up the slots total */ 
-        total_blocks_required += slots_blocks; 
-        total_blocks_required += slots_map_blocks;
-    }
+    bitmap_size_in_blocks = (bc->in_file_size_in_blocks / KFS_BLOCKSIZE) + 1;
+    bc->out_bitmap_size_in_blocks = bitmap_size_in_blocks;
+    total_blocks_required += bitmap_size_in_blocks;
+
+    bc->out_total_blocks_required;
 }
 
 int parse_opts( int argc, char **argv, options_t *options){
@@ -686,16 +749,16 @@ int parse_opts( int argc, char **argv, options_t *options){
     printf("Flags=<0x%x>\n", options->flags);
 
     memset( &bc, 0, sizeof( bc));
-    bc.file_size_in_blocks = options->size / KFS_BLOCKSIZE;
-    bc.file_size_in_mbytes = options->size / _1M;
+    bc.in_file_size_in_blocks = options->size / KFS_BLOCKSIZE;
+    bc.in_file_size_in_mbytes = options->size / _1M;
  
     if( options->flags & OPT_NUM_SINODES || 
         options->flags & OPT_NUM_SLOTS){
         
-        bc.sinodes_num = options->sinodes_num; 
-        bc.slots_num = options->slots_num;
+        bc.in_sinodes_num = options->sinodes_num; 
+        bc.in_slots_num = options->slots_num;
     }else if( options->flags & OPT_PERCENTAGE){
-        bc.percentage = options->percentage; 
+        bc.in_percentage = options->percentage; 
     }
 
     rc = blocks_calc( &bc);
@@ -704,10 +767,6 @@ int parse_opts( int argc, char **argv, options_t *options){
         blocks_calc_display( &bc);
         exit( 0);
     }
- 
-
-
-
 
     return flags;
 }

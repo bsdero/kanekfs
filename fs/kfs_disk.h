@@ -259,7 +259,18 @@ typedef struct{
 }kfs_slot_data_t;
 
 /* enough for slots. Now on to the real file system stuff. */ 
+/* Same than the slots table, we have a flower-type extent, and the first
+ * block of the extent has a kfs_sinodes_descriptor_t. It includes the 
+ * extent header, pointers to the blocks/extents with sinodes, bitmap, sinodes
+ * counters and we have super inodes after this data structure. */
+typedef struct{
+    kfs_extent_header_t header;
+    kfs_extent_entry_t sinodes_extent;
+    kfs_extent_entry_t sinodes_bitmap;
 
+    uint64_t total_slots_count;        /* slots capacity */
+    uint64_t total_slots_in_use;
+}kfs_sinodes_descriptor_t;
 
 
 /* Edges are represented also in an extent.

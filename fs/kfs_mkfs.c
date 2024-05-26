@@ -454,6 +454,8 @@ int blocks_calc_display( blocks_calc_t *bc){
         bc->out_slots_table_in_blocks, bc->out_slots_bitmap_blocks_num);
     printf("   SinodesTableInBlocks=%lu, SinodesMapInBlocks=%lu\n", 
         bc->out_sinodes_table_in_blocks, bc->out_sinodes_bitmap_blocks_num);
+
+    return(0);
 }
 
 int blocks_calc( blocks_calc_t *bc){
@@ -589,7 +591,7 @@ int parse_opts( int argc, char **argv, options_t *options){
     int opt, flags; 
     struct stat st;
     int rc;
-    blocks_calc_t bc;
+    int need_file = 1;
 
 #define OPT_SIZE                         0x0001
 #define OPT_NUM_SLOTS                    0x0002
@@ -660,11 +662,19 @@ int parse_opts( int argc, char **argv, options_t *options){
         exit( 0);
     }
 
-    /* last argument missing, error .*/
-    if (optind >= argc) {
-        fprintf(stderr, "Expected argument after options\n");
-        display_help();
-        exit(EXIT_FAILURE);
+    if( ( flags & (OPT_CALCULATE|OPT_NUM_SINODES|OPT_NUM_SLOTS)) ==
+                  (OPT_CALCULATE|OPT_NUM_SINODES|OPT_NUM_SLOTS)){
+        need_file = 0;
+    }
+
+
+    if( need_file == 1){
+        /* last argument missing, error .*/
+        if (optind >= argc) {
+            fprintf(stderr, "Expected argument after options\n");
+            display_help();
+            exit(EXIT_FAILURE);
+        }
     }
 
     /* cases for invalid options combination */
@@ -686,7 +696,10 @@ int parse_opts( int argc, char **argv, options_t *options){
         exit( EXIT_FAILURE);
     }
 
-    strcpy( options->filename, argv[optind]);
+
+    if( need_file != 0){
+        strcpy( options->filename, argv[optind]);
+    }
     options->flags = flags;
 
     if( options->flags & OPT_SIZE){
@@ -735,7 +748,7 @@ int parse_opts( int argc, char **argv, options_t *options){
 
 
     
-    if( (options->flags & OPT_CALCULATE) == 0){
+    if( need_file == 1){
         rc = stat( options->filename, &st);
         if( rc != 0){
             if( options->flags & OPT_DUMP){
@@ -771,42 +784,47 @@ int parse_opts( int argc, char **argv, options_t *options){
    
             options->flags |= OPT_SIZE;
         }
+        printf(" -File system size: %lu Bytes (%lu MBytes, %.2f GBytes)\n",
+            options->size, 
+            options->size/_1M, 
+            (double)options->size/(double)_1G);
+
     }
-    printf(" -File system size: %lu Bytes (%lu MBytes, %.2f GBytes)\n",
-        options->size, options->size/_1M, (double)options->size/(double)_1G);
 
-    printf("Filename=<%s>\n", options->filename);
-    printf("SSize=<%s>\n", options->str_size);
-    printf("SSInodesNum=<%s>\n", options->str_sinodes_num);
-    printf("SSlotsNum=<%s>\n", options->str_slots_num);
-    printf("SPercentage=<%s>\n", options->str_percentage);
-    printf("Size=<%lu>\n", options->size);
-    printf("SInodesNum=<%lu>\n", options->sinodes_num);
-    printf("SlotsNum=<%lu>\n", options->slots_num);
-    printf("Percentage=<%d>\n", options->percentage);
-    printf("Flags=<0x%x>\n", options->flags);
 
-    memset( &bc, 0, sizeof( bc));
-    bc.in_file_size_in_blocks = options->size / KFS_BLOCKSIZE;
-    bc.in_file_size_in_mbytes = options->size / _1M;
+    if( options->flags & (OPT_VERBOSE|OPT_CALCULATE)){
+        printf("Filename=<%s>\n", options->filename);
+        printf("SSize=<%s>\n", options->str_size);
+        printf("SSInodesNum=<%s>\n", options->str_sinodes_num);
+        printf("SSlotsNum=<%s>\n", options->str_slots_num);
+        printf("SPercentage=<%s>\n", options->str_percentage);
+        printf("Size=<%lu>\n", options->size);
+        printf("SInodesNum=<%lu>\n", options->sinodes_num);
+        printf("SlotsNum=<%lu>\n", options->slots_num);
+        printf("Percentage=<%d>\n", options->percentage);
+        printf("Flags=<0x%x>\n", options->flags);
+    }
+
+    return(0);
+}
+
+int compute_blocks( options_t *options, blocks_calc_t *bc){
+    int rc;
+
+    memset( ( void *) bc, 0, sizeof( blocks_calc_t));
+    bc->in_file_size_in_blocks = options->size / KFS_BLOCKSIZE;
+    bc->in_file_size_in_mbytes = options->size / _1M;
  
-    if( options->flags & OPT_NUM_SINODES || 
-        options->flags & OPT_NUM_SLOTS){
+    if( options->flags & (OPT_NUM_SINODES|OPT_NUM_SLOTS)){
         
-        bc.in_sinodes_num = options->sinodes_num; 
-        bc.in_slots_num = options->slots_num;
+        bc->in_sinodes_num = options->sinodes_num; 
+        bc->in_slots_num = options->slots_num;
     }
     
 
-    bc.in_percentage = options->percentage;
-    rc = blocks_calc( &bc);
-    blocks_calc_display( &bc);
- 
-    if( options->flags & OPT_CALCULATE){
-       exit( 0);
-    }
-
-    return flags;
+    bc->in_percentage = options->percentage;
+    rc = blocks_calc( bc);
+    return( rc);
 }
 
 int main( int argc, char **argv){
@@ -817,12 +835,26 @@ int main( int argc, char **argv){
     uint64_t fs_size; 
     uint64_t num_blocks;
     uint64_t num_blocks_4_map; 
-    options_t opts;
-
+    options_t options;
+    blocks_calc_t blocks_results;
 
     unsigned int flags = 0x0000; 
 
-    flags = parse_opts( argc, argv, &opts);
+    /* parse options */
+    rc = parse_opts( argc, argv, &options);
+
+    /* compute blocks and values */
+    rc = compute_blocks( &options, &blocks_results);
+
+    if( options.flags & (OPT_VERBOSE|OPT_CALCULATE) ){
+        blocks_calc_display( &blocks_results);
+    }
+
+    if( options.flags & OPT_CALCULATE){
+       exit( 0);
+    }
+
+
     exit(0);
    
  

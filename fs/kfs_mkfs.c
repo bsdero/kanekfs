@@ -27,6 +27,33 @@
 #endif
 
 uint64_t blocks_per_block = KFS_BLOCKSIZE * 8;
+typedef struct{
+    char filename[240];
+    char str_size[32];
+    char str_slots_num[24];
+    char str_sinodes_num[24];
+    char str_percentage[10];
+    uint64_t sinodes_num;
+    uint64_t slots_num;
+    uint64_t size;
+    int percentage;
+    int flags;
+}options_t;
+
+typedef struct{
+    uint64_t in_sinodes_num;
+    uint64_t in_slots_num;
+    uint64_t in_file_size_in_mbytes;
+    uint64_t in_file_size_in_blocks;
+    int in_percentage;
+    uint64_t out_bitmap_size_in_blocks;
+    uint64_t out_slots_table_in_blocks, out_slots_bitmap_blocks_num;
+    uint64_t out_sinodes_table_in_blocks, out_sinodes_bitmap_blocks_num;
+    uint64_t out_sinodes_num, out_slots_num;
+    uint64_t out_total_blocks_required;
+    int result;
+}blocks_calc_t;
+
 
 int display_help(){
     char *help[]={
@@ -272,26 +299,20 @@ int kfs_create( char *fname, uint64_t fs_size){
 }
 
 
-int build_filesystem_in_file( char *fname, uint64_t fs_size ){
+int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
 
 #define KFS_ROOT_INODE_OFFSET          256
-    int fd = open( fname, O_RDWR );
-    uint64_t i, num_blocks_map;
-    char *p, *blockmap;
+    int fd;
+    uint64_t i;
+    char *p;
     kfs_superblock_t sb; 
     /*mx_inode_t root_i;*/    
     time_t current_time;
     char secret[] = "Good! U found the secret message!! 1234567890";
-    uint64_t num_blocks = (uint64_t) (fs_size/KFS_BLOCKSIZE);
-    uint64_t num_blocks_4_map = ( fs_size / blocks_per_block) + 1;
-    uint64_t blockmap_address = num_blocks - num_blocks_4_map;
 
-    printf(" -Block size: %d, Blocks Num: %lu\n",
-        KFS_BLOCKSIZE, num_blocks);
 
-    printf(" -Blockmap size in blocks: %lu, Blockmap Adress: ( 0x%lx, %lu)\n",
-        num_blocks_4_map, blockmap_address, blockmap_address);
 
+    fd = open( options->filename, O_RDWR );
     if( fd < 0){
         perror( "ERROR: Could not open file\n");
         return( -1);
@@ -306,20 +327,24 @@ int build_filesystem_in_file( char *fname, uint64_t fs_size ){
 
     /* Fill the whole file with zeroes */
     memset( p, 0, KFS_BLOCKSIZE);
+
     lseek( fd, 0, SEEK_SET);
-    for( i = 0; i < num_blocks; i++){
+    for( i = 0; i < bc->in_file_size_in_blocks; i++){
         write( fd, p, KFS_BLOCKSIZE);
         lseek( fd, 0, SEEK_END);
     }
 
     /* Build the super block */ 
-/*    memset( (void *) &sb, 0, sizeof( sb));
-    sb.sb_magic = KFS_MAGICNUMBER;
+    memset( (void *) &sb, 0, sizeof( kfs_superblock_t ));
+    current_time = time( NULL);
+    sb.sb_magic = KFS_MAGIC;
+    sb.sb_version = 0x000001;
     sb.sb_flags = 0x0000;
     sb.sb_blocksize = KFS_BLOCKSIZE;
     sb.sb_root_super_inode = 0;
+    
 
-
+/*
     sb.sb_si_table.si_capacity = num_sinodes;
     sb.sb_si_table.si_in_use = 1;
 
@@ -407,33 +432,6 @@ int build_filesystem_in_file( char *fname, uint64_t fs_size ){
     return(0);
     */
 }
-
-typedef struct{
-    char filename[240];
-    char str_size[32];
-    char str_slots_num[24];
-    char str_sinodes_num[24];
-    char str_percentage[10];
-    uint64_t sinodes_num;
-    uint64_t slots_num;
-    uint64_t size;
-    int percentage;
-    int flags;
-}options_t;
-
-typedef struct{
-    uint64_t in_sinodes_num;
-    uint64_t in_slots_num;
-    uint64_t in_file_size_in_mbytes;
-    uint64_t in_file_size_in_blocks;
-    int in_percentage;
-    uint64_t out_bitmap_size_in_blocks;
-    uint64_t out_slots_table_in_blocks, out_slots_bitmap_blocks_num;
-    uint64_t out_sinodes_table_in_blocks, out_sinodes_bitmap_blocks_num;
-    uint64_t out_sinodes_num, out_slots_num;
-    uint64_t out_total_blocks_required;
-    int result;
-}blocks_calc_t;
 
 int blocks_calc_display( blocks_calc_t *bc){
     printf("IN:\n");
@@ -828,17 +826,10 @@ int compute_blocks( options_t *options, blocks_calc_t *bc){
 }
 
 int main( int argc, char **argv){
-    char *fname;
-    char *ssize;
-    struct stat st;
     int rc;
-    uint64_t fs_size; 
-    uint64_t num_blocks;
-    uint64_t num_blocks_4_map; 
     options_t options;
     blocks_calc_t blocks_results;
 
-    unsigned int flags = 0x0000; 
 
     /* parse options */
     rc = parse_opts( argc, argv, &options);
@@ -854,11 +845,8 @@ int main( int argc, char **argv){
        exit( 0);
     }
 
-
-    exit(0);
-   
  
-    rc = build_filesystem_in_file( fname, fs_size); 
+    rc = build_filesystem_in_file( &options, &blocks_results); 
     if( rc != 0){
         fprintf( stderr, "ERROR: Failed to build a filesystem\n");
     }else{

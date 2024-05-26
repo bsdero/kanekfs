@@ -426,7 +426,7 @@ typedef struct{
     uint64_t in_slots_num;
     uint64_t in_file_size_in_mbytes;
     uint64_t in_file_size_in_blocks;
-    uint64_t in_percentage;
+    int in_percentage;
     uint64_t out_bitmap_size_in_blocks;
     uint64_t out_slots_table_in_blocks, out_slots_bitmap_blocks_num;
     uint64_t out_sinodes_table_in_blocks, out_sinodes_bitmap_blocks_num;
@@ -444,8 +444,8 @@ int blocks_calc_display( blocks_calc_t *bc){
     printf("   Percentage=%d\n", bc->in_percentage);
     printf("OUT:\n");
     printf("   TotalBlocksRequired=%lu\n", bc->out_total_blocks_required);
-    printf("   TotalDiskRequiredInMB=%lu\n",
-               (_1M / KFS_BLOCKSIZE) * bc->out_total_blocks_required);
+    printf("   TotalDiskRequiredInMB=%lu\n",  /* 128 blocks per Mbyte */
+           bc->out_total_blocks_required / 128);
     printf("   BitmapSizeInBlocks=%lu\n", bc->out_bitmap_size_in_blocks);
 
     printf("   InodesNum=%lu\n", bc->out_sinodes_num);
@@ -455,7 +455,6 @@ int blocks_calc_display( blocks_calc_t *bc){
     printf("   SinodesTableInBlocks=%lu, SinodesMapInBlocks=%lu\n", 
         bc->out_sinodes_table_in_blocks, bc->out_sinodes_bitmap_blocks_num);
 }
-
 
 int blocks_calc( blocks_calc_t *bc){
     uint64_t total_blocks_required = 0, bitmap_size_in_blocks = 0;
@@ -479,26 +478,34 @@ int blocks_calc( blocks_calc_t *bc){
     slots_per_block = n / sizeof( kfs_slot_t);
 
     n = KFS_BLOCKSIZE - sizeof( kfs_sinodes_descriptor_t);
-    sinodes_in_1st_block = n / sizeof( kfs_slot_t);
+    sinodes_in_1st_block = n / sizeof( kfs_sinode_t);
 
     /* the other slots blocks/extents have a extent header and more slots.
      * So we need to know how many slots we can store per block */
     n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
-    sinodes_per_block = n / sizeof( kfs_slot_t);
+    sinodes_per_block = n / sizeof( kfs_sinode_t);
  
 
     /* now calculate how many bits per block can have our bitmap */
-    bits_per_block = n * 8;
+    bits_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) * 8;
 
 
-    total_blocks_required += 1; /* super block */
-    if( bc->in_percentage != 0){
+    if( bc->in_sinodes_num == 0 && bc->in_slots_num == 0){
+        total_blocks_required += 1; /* super block */
+
+
         /* calculate how many slots ara available, from the file size 
          * in blocks  */
 
         /* calculate how many blocks for slots have we */
-        slots_blocks = (bc->in_file_size_in_blocks * 100) / bc->in_percentage;
+        slots_blocks = (uint64_t) ( (float)bc->in_file_size_in_blocks * 
+                        (( float) bc->in_percentage / 100.0) / 2.0);
         sinodes_blocks = slots_blocks;  /* same for sinodes table blocks */
+
+        /* sum the total blocks required now */
+        total_blocks_required += slots_blocks + sinodes_blocks;
+
+        TRACE("slots_blocks=%lu, sinodes_blocks=%lu\n", slots_blocks, sinodes_blocks);
 
         /* how many blocks our slots map need */
         slots_map_blocks = ( slots_blocks / bits_per_block) + 1;
@@ -508,9 +515,6 @@ int blocks_calc( blocks_calc_t *bc){
 
         /* now get the real slots number we can have */
         slots_result = slots_in_1st_block + ( slots_blocks * slots_per_block);
-
-        /* add up to the total of required blocks */
-        total_blocks_required += slots_result;
 
 
         bc->out_slots_bitmap_blocks_num = slots_map_blocks;
@@ -530,22 +534,55 @@ int blocks_calc( blocks_calc_t *bc){
         sinodes_result = sinodes_in_1st_block + 
                        ( sinodes_blocks * sinodes_per_block);
 
-        /* add up to the total of required blocks */
-        total_blocks_required += sinodes_result;
-
 
         bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
         bc->out_sinodes_table_in_blocks = sinodes_blocks;
         bc->out_sinodes_num = sinodes_result;
+    }else{
+        if( bc->in_sinodes_num != 0){
+            sinodes_blocks = (( bc->in_sinodes_num - sinodes_in_1st_block) / 
+                            sinodes_per_block) + 1;
+            sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + 1;
+            sinodes_blocks -= sinodes_map_blocks;
+            bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
+            bc->out_sinodes_table_in_blocks = sinodes_blocks;
+            total_blocks_required += sinodes_map_blocks + sinodes_blocks;
+            bc->out_sinodes_num = bc->in_sinodes_num;
+        }
+
+        if( bc->in_slots_num != 0){
+            slots_blocks = (( bc->in_slots_num - slots_in_1st_block) / 
+                                slots_per_block) + 1;
+            /* how many blocks our slots map need */
+            slots_map_blocks = ( slots_blocks / bits_per_block) + 1;
+            slots_blocks -= slots_map_blocks;
+            bc->out_slots_bitmap_blocks_num = slots_map_blocks;
+            bc->out_slots_table_in_blocks = slots_blocks;
+            total_blocks_required += slots_map_blocks + slots_blocks;
+            bc->out_slots_num = bc->in_slots_num;
+        }
+
+        /* calculate total device size */
+        n = total_blocks_required;
+        bc->in_file_size_in_blocks = (uint64_t) ((float) n * 
+                                        ( 100.0 / (float) bc->in_percentage));
+
+        /* minus slots and sinodes part 
+        bc->in_file_size_in_blocks -= total_blocks_required; 
+        */
+    bc->in_file_size_in_mbytes = bc->in_file_size_in_blocks / 128;
+        total_blocks_required += 1;
     }
 
 
 
-    bitmap_size_in_blocks = (bc->in_file_size_in_blocks / KFS_BLOCKSIZE) + 1;
+    bitmap_size_in_blocks = (bc->in_file_size_in_blocks / bits_per_block) + 1;
     bc->out_bitmap_size_in_blocks = bitmap_size_in_blocks;
     total_blocks_required += bitmap_size_in_blocks;
 
-    bc->out_total_blocks_required;
+    bc->out_total_blocks_required = total_blocks_required;
+
+    return(0);
 }
 
 int parse_opts( int argc, char **argv, options_t *options){
@@ -639,7 +676,7 @@ int parse_opts( int argc, char **argv, options_t *options){
                                                                                                               
          /* -p and -i, or -p and -n can not go together */
          ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SINODES)) == 
-                    (OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
+                    ( OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
          ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ==
                     ( OPT_PERCENTAGE | OPT_NUM_SLOTS))
 
@@ -697,43 +734,44 @@ int parse_opts( int argc, char **argv, options_t *options){
     }
 
 
-    rc = stat( options->filename, &st);
-    if( rc != 0){
-        if( ( options->flags & OPT_CALCULATE) || 
-            ( options->flags & OPT_DUMP)){
-            fprintf( stderr, "ERROR: File does not exist.\n");
-            display_help();
-            return( -1);
-        }
-
-        if( (options->flags & OPT_CALCULATE) == 0 ){
-            printf("File '%s' does not exist, will create. \n", 
-                    options->filename);
-            options->flags |= MKFS_CREATE_FILE;
-            options->flags |= MKFS_IS_REGULAR_FILE;
-        }
-    }else{
-        if( (! S_ISREG(st.st_mode)) && (! S_ISBLK(st.st_mode))){
-            fprintf( stderr, "ERROR: File is not a regular file nor a ");
-            fprintf( stderr, "block device. Exit. ");
-            return( -1);
-        }  
-
-        if( S_ISREG(st.st_mode)){
-            if( st.st_size > 0){
-                options->size = (uint64_t) st.st_size;
+    
+    if( (options->flags & OPT_CALCULATE) == 0){
+        rc = stat( options->filename, &st);
+        if( rc != 0){
+            if( options->flags & OPT_DUMP){
+                fprintf( stderr, "ERROR: File does not exist.\n");
+                display_help();
+                return( -1);
             }
-            options->flags |= MKFS_IS_REGULAR_FILE;
-        }
 
-        if( S_ISBLK(st.st_mode)){
-            options->size = (uint64_t) get_bd_device_size( options->filename);
-            options->flags |= MKFS_IS_BLOCKDEVICE;
-        }
+            if( (options->flags & OPT_CALCULATE) == 0 ){
+                printf("File '%s' does not exist, will create. \n", 
+                        options->filename);
+                options->flags |= MKFS_CREATE_FILE;
+                options->flags |= MKFS_IS_REGULAR_FILE;
+            }
+        }else{
+            if( (! S_ISREG(st.st_mode)) && (! S_ISBLK(st.st_mode))){
+                fprintf( stderr, "ERROR: File is not a regular file nor a ");
+                fprintf( stderr, "block device. Exit. ");
+                return( -1);
+            }  
 
-        options->flags |= OPT_SIZE;
+            if( S_ISREG(st.st_mode)){
+                if( st.st_size > 0){
+                    options->size = (uint64_t) st.st_size;
+                }
+                options->flags |= MKFS_IS_REGULAR_FILE;
+            }
+
+            if( S_ISBLK(st.st_mode)){
+                options->size = (uint64_t) get_bd_device_size( options->filename);
+                options->flags |= MKFS_IS_BLOCKDEVICE;
+            }
+   
+            options->flags |= OPT_SIZE;
+        }
     }
-
     printf(" -File system size: %lu Bytes (%lu MBytes, %.2f GBytes)\n",
         options->size, options->size/_1M, (double)options->size/(double)_1G);
 
@@ -757,15 +795,15 @@ int parse_opts( int argc, char **argv, options_t *options){
         
         bc.in_sinodes_num = options->sinodes_num; 
         bc.in_slots_num = options->slots_num;
-    }else if( options->flags & OPT_PERCENTAGE){
-        bc.in_percentage = options->percentage; 
     }
+    
 
+    bc.in_percentage = options->percentage;
     rc = blocks_calc( &bc);
-
+    blocks_calc_display( &bc);
+ 
     if( options->flags & OPT_CALCULATE){
-        blocks_calc_display( &bc);
-        exit( 0);
+       exit( 0);
     }
 
     return flags;

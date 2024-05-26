@@ -85,6 +85,8 @@ int show_findgap_test_results( int test_id,
     global_results[test_id] = test_result;
     printf("%s : %s\n\n", tests[test_id], 
             ( global_results[test_id] ? "FAIL" : "PASSED" ));
+
+    return( test_result);
 }
 
 int show_test_results( int test_id, 
@@ -246,12 +248,10 @@ int show_test_results( int test_id,
  ***********************************************************************/
 int main(){
     unsigned char m1[16];
-    unsigned char m2[16];
-    unsigned char b0 = 0x00;
     unsigned char bresult[16];
-    int iresult[16], icount[16], ioffset[16], igap[16], erc[16];
+    int iresult[16], icount[16], ioffset[16], igap[16];
     int i, rc;
-    uint64_t count_result[16], addr[16], eaddr[16]; 
+    uint64_t count_result[16], addr[16]; 
     int test_id = 0;
     
     memset( &global_results, 0, sizeof( int) * TESTS_NUM);

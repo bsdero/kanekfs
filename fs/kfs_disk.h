@@ -281,24 +281,15 @@ typedef struct{
 
 
 typedef struct{
-    uint64_t st_capacity;
-    uint64_t st_in_use;
-    kfs_extent_t st_bitmap_extent; 
-    kfs_extent_t st_table_extent;
-}kfs_slot_table_t;
+    uint64_t capacity;
+    uint64_t in_use;
+    kfs_extent_t bitmap_extent; 
+    kfs_extent_t table_extent;
+}kfs_table_t;
 
-typedef struct{
-    uint64_t si_capacity;
-    uint64_t si_in_use;
-    kfs_extent_t si_bitmap_extent; 
-    kfs_extent_t si_table_extent;
-}kfs_si_table_t;
-
-typedef struct{
-    uint64_t bm_blocks_capacity;
-    uint64_t bm_blocks_in_use;
-    kfs_extent_t bm_block_map;
-}kfs_blockmap_t;
+typedef kfs_table_t kfs_slot_table_t;
+typedef kfs_table_t kfs_si_table_t;
+typedef kfs_table_t kfs_blockmap_t;
 
 typedef struct{
     uint64_t sb_magic; 

@@ -242,13 +242,21 @@ int page_write( char *page, int fd, int block_num){
 
 int build_superblock( blocks_calc_t *bc, char *sbp){
     time_t current_time;
-    kfs_extent_t slots_extent;
+    kfs_extent_t extent;
     int rc = 0;
     kfs_superblock_t *sb = (kfs_superblock_t *) sbp; 
     /*mx_inode_t root_i;*/    
     char secret[] = "Good! U found the secret message!! 1234567890";
+    uint64_t sinode_map_block, slot_map_block, fs_map_block;
 
- 
+
+    /* set maps addresses */
+    fs_map_block = bc->in_file_size_in_blocks - 
+                   bc->out_bitmap_size_in_blocks;
+
+    slot_map_block = fs_map_block - bc->out_slots_bitmap_blocks_num;
+    sinode_map_block = slot_map_block - bc->out_sinodes_bitmap_blocks_num;
+
     /* Build the super block */ 
     memset( (void *) sbp, 0, sizeof( kfs_superblock_t ));
     current_time = time( NULL);
@@ -263,22 +271,52 @@ int build_superblock( blocks_calc_t *bc, char *sbp){
     sb->sb_m_time = current_time; 
     sb->sb_a_time = current_time;
 
-    sb->sb_slot_table.st_capacity = bc->out_slots_num;
-    sb->sb_slot_table.st_in_use = 1;
-    slots_extent.ee_block_addr = 1;
-    slots_extent.ee_block_size = bc->out_slots_table_in_blocks;
-    slots_extent.ee_log_size = bc->out_slots_num;
-    slots_extent.ee_log_addr = 0;
-    sb->sb_slot_table.st_table_extent = slots_extent;
 
+    /* populate the slot index extent and its map extent */
+    sb->sb_slot_table.capacity = bc->out_slots_num;
+    sb->sb_slot_table.in_use = 1;
+    extent.ee_block_addr = 1; /* block address of the slot table= 1 */ 
+    extent.ee_block_size = bc->out_slots_table_in_blocks;
+    extent.ee_log_size = bc->out_slots_num;
+    extent.ee_log_addr = 0;
+    sb->sb_slot_table.table_extent = extent;
 
+    extent.ee_block_addr = slot_map_block;
+    extent.ee_block_size = bc->out_slots_bitmap_blocks_num;
+    extent.ee_log_size = bc->out_slots_bitmap_blocks_num;
+    extent.ee_log_addr = 0;
+    sb->sb_slot_table.bitmap_extent = extent;
 
+    /* populate the sinode index extent and its map extent */
+    sb->sb_si_table.capacity = bc->out_sinodes_num;
+    sb->sb_si_table.in_use = 1;
+    extent.ee_block_addr = bc->out_slots_table_in_blocks + 1; 
+    extent.ee_block_size = bc->out_sinodes_table_in_blocks;
+    extent.ee_log_size = bc->out_sinodes_num;
+    extent.ee_log_addr = 0;
+    sb->sb_si_table.table_extent = extent;
+
+    extent.ee_block_addr = sinode_map_block;
+    extent.ee_block_size = bc->out_sinodes_bitmap_blocks_num;
+    extent.ee_log_size = bc->out_sinodes_bitmap_blocks_num;
+    extent.ee_log_addr = 0;
+    sb->sb_si_table.bitmap_extent = extent;
+
+    /* populate the map extent */
+    extent.ee_block_addr = fs_map_block;
+    extent.ee_block_size = bc->out_bitmap_size_in_blocks;
+    extent.ee_log_size = bc->out_bitmap_size_in_blocks;
+    extent.ee_log_addr = 0;
+    sb->sb_si_table.bitmap_extent = extent;
+    memset( ( void *) &extent, 0, sizeof( kfs_extent_t));
+
+    
     return( rc);
 }
  
 
 int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
-    int fd, rc;
+    int fd, rc = 0;
     uint64_t i;
     char *page, *sb_page;
 
@@ -311,7 +349,7 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
 
 
     
-
+    return( rc);
     /*
      *
     build_slots( kfs_superblock_t *sb, char *slots, char *slots_map);

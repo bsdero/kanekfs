@@ -205,29 +205,8 @@ typedef kfs_extent_entry_t kfs_extent_t;
  *
  */
 
-/* kfs_metadata_descriptor_t is a data structure on disk, which, together with
- * a kfs_table_header_t structure in an extent root block, keeps extra data 
- * of the slots  -dictionaries- stored.
- * It should allow:
- *   -Creation and population into dictionaries slots
- *   -Read data from slots
- *   -Updates of data in slots
- *   -Deletion of data in slots
- *   -Provisioning of extra slots.
- *
- *   The kfs_metadata_descriptor_t should be stored inmediately after the 
- *   kfs_extent_header_t with the magic KFS_SLOTS_TABLE_MAGIC.
- */
-typedef struct{
-    kfs_extent_header_t header;
-    kfs_extent_entry_t slots_extent;
-    kfs_extent_entry_t slots_bitmap;
 
-    uint64_t total_slots_count;        /* slots capacity */
-    uint64_t total_slots_in_use;
-}kfs_metadata_descriptor_t;
-
-/* Right after the location of a kfs_metadata_descriptor_t, a lot of 
+/* Right after the location of the corresponding kfs_extent_header_t a lot of 
  * structures kfs_slots_t should be stored. These data 
  * structures stores the actual location of the dictionary and the slot owner.
  * This is the on-disk representation of the slot_t data type. 
@@ -259,19 +238,6 @@ typedef struct{
 }kfs_slot_data_t;
 
 /* enough for slots. Now on to the real file system stuff. */ 
-/* Same than the slots table, we have a flower-type extent, and the first
- * block of the extent has a kfs_sinodes_descriptor_t. It includes the 
- * extent header, pointers to the blocks/extents with sinodes, bitmap, sinodes
- * counters and we have super inodes after this data structure. */
-typedef struct{
-    kfs_extent_header_t header;
-    kfs_extent_entry_t sinodes_extent;
-    kfs_extent_entry_t sinodes_bitmap;
-
-    uint64_t total_slots_count;        /* slots capacity */
-    uint64_t total_slots_in_use;
-}kfs_sinodes_descriptor_t;
-
 
 /* Edges are represented also in an extent.
  */
@@ -317,15 +283,15 @@ typedef struct{
 typedef struct{
     uint64_t st_capacity;
     uint64_t st_in_use;
-    kfs_extent_t st_bitmap; 
-    kfs_extent_t st_table;
+    kfs_extent_t st_bitmap_extent; 
+    kfs_extent_t st_table_extent;
 }kfs_slot_table_t;
 
 typedef struct{
     uint64_t si_capacity;
     uint64_t si_in_use;
-    kfs_extent_t si_bitmap; 
-    kfs_extent_t si_table;
+    kfs_extent_t si_bitmap_extent; 
+    kfs_extent_t si_table_extent;
 }kfs_si_table_t;
 
 typedef struct{

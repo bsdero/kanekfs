@@ -239,16 +239,48 @@ int page_write( char *page, int fd, int block_num){
     return(0);
 }
 
-int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
 
-#define KFS_ROOT_INODE_OFFSET          256
-    int fd;
+int build_superblock( blocks_calc_t *bc, char *sbp){
+    time_t current_time;
+    kfs_extent_t slots_extent;
+    int rc = 0;
+    kfs_superblock_t *sb = (kfs_superblock_t *) sbp; 
+    /*mx_inode_t root_i;*/    
+    char secret[] = "Good! U found the secret message!! 1234567890";
+
+ 
+    /* Build the super block */ 
+    memset( (void *) sbp, 0, sizeof( kfs_superblock_t ));
+    current_time = time( NULL);
+    sb->sb_magic = KFS_MAGIC;
+    sb->sb_version = 0x000001;
+    sb->sb_flags = 0x0000;
+    sb->sb_blocksize = KFS_BLOCKSIZE;
+    sb->sb_root_super_inode = 0;
+   
+
+    sb->sb_c_time = current_time; 
+    sb->sb_m_time = current_time; 
+    sb->sb_a_time = current_time;
+
+    sb->sb_slot_table.st_capacity = bc->out_slots_num;
+    sb->sb_slot_table.st_in_use = 1;
+    slots_extent.ee_block_addr = 1;
+    slots_extent.ee_block_size = bc->out_slots_table_in_blocks;
+    slots_extent.ee_log_size = bc->out_slots_num;
+    slots_extent.ee_log_addr = 0;
+    sb->sb_slot_table.st_table_extent = slots_extent;
+
+
+
+    return( rc);
+}
+ 
+
+int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
+    int fd, rc;
     uint64_t i;
     char *page, *sb_page;
-    kfs_superblock_t sb; 
-    /*mx_inode_t root_i;*/    
-    time_t current_time;
-    char secret[] = "Good! U found the secret message!! 1234567890";
 
 
 
@@ -272,20 +304,11 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
     }
 
 
+    fsync( fd);
+    sb_page = page;
 
-    /* Build the super block */ 
-    memset( (void *) &sb, 0, sizeof( kfs_superblock_t ));
-    current_time = time( NULL);
-    sb.sb_magic = KFS_MAGIC;
-    sb.sb_version = 0x000001;
-    sb.sb_flags = 0x0000;
-    sb.sb_blocksize = KFS_BLOCKSIZE;
-    sb.sb_root_super_inode = 0;
-   
+    rc = build_superblock( bc, sb_page);
 
-    sb.sb_c_time = current_time; 
-    sb.sb_m_time = current_time; 
-    sb.sb_a_time = current_time;
 
     
 

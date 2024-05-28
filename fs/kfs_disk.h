@@ -127,7 +127,7 @@ typedef struct{
 #define KFS_EXTENT_MAGIC                           0xaca771
 
     
-#define KFS_SLOTS_ROOT_MAGIC                       0x0c01a7e
+/*#define KFS_SLOTS_ROOT_MAGIC                       0x0c01a7e*/
 #define KFS_SLOTS_BITMAP_MAGIC                     0x1a77e
 //#define KFS_SLOTS_TABLE_MAGIC                      0xdecaf
 #define KFS_SLOTS_DATA_MAGIC                       0xc0ffee

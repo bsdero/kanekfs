@@ -232,7 +232,7 @@ char *page_alloc(){
 }
 
 
-int page_write( char *page, int fd, int block_num){
+int page_write( int fd, char *page, int block_num){
     lseek( fd, block_num * KFS_BLOCKSIZE, SEEK_SET);
     write( fd, page, KFS_BLOCKSIZE);
 
@@ -240,11 +240,14 @@ int page_write( char *page, int fd, int block_num){
 }
 
 
-int build_superblock( blocks_calc_t *bc, char *sbp){
+int build_superblock( int fd, blocks_calc_t *bc, char *sbp){
     time_t current_time;
     kfs_extent_t extent;
-    int rc = 0;
+    char *p;
     kfs_superblock_t *sb = (kfs_superblock_t *) sbp; 
+    int rc; 
+
+
     /*mx_inode_t root_i;*/    
     char secret[] = "Good! U found the secret message!! 1234567890";
     uint64_t sinode_map_block, slot_map_block, fs_map_block;
@@ -309,16 +312,48 @@ int build_superblock( blocks_calc_t *bc, char *sbp){
     extent.ee_log_addr = 0;
     sb->sb_si_table.bitmap_extent = extent;
     memset( ( void *) &extent, 0, sizeof( kfs_extent_t));
+    sb->sb_si_table.table_extent = extent;
+ 
+    p = sbp;
+    p += 512; 
+    strcpy( p, secret);
+    rc = page_write( fd, sbp, 0);
+    if( rc != 0){
+        TRACE_ERR( "Coult not write\n");
+        exit(-1);
+    }
 
-    
     return( rc);
 }
+
+
+int build_sinodes( int fd, blocks_calc_t *bc, char *sbp, char *slp){
+    time_t current_time;
+    kfs_extent_t extent;
+    char *p;
+    kfs_superblock_t *sb = (kfs_superblock_t *) sbp; 
+    kfs_extent_header_t *ex_header = ( kfs_extent_header_t *) slp; 
+    int rc; 
+    uint64_t i, n, sinodes_per_block;
+ 
+    n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
+    sinodes_per_block = n / sizeof( kfs_sinode_t);
+
+   
+    ex_header->eh_magic = KFS_SLOTS_DATA_MAGIC;
+    ex_header->eh_entries_in_use = 1;
+    ex_header->eh_entries_capacity = sinodes_per_block;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_INDEX;
+
+    return(0);
+}
+
  
 
 int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
     int fd, rc = 0;
     uint64_t i;
-    char *page, *sb_page;
+    char *page, *sb_page, *tb_page;
 
 
 
@@ -345,10 +380,11 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
     fsync( fd);
     sb_page = page;
 
-    rc = build_superblock( bc, sb_page);
+    rc = build_superblock( fd, bc, sb_page);
 
+    tb_page = page_alloc();
+    rc = build_sinodes( fd, bc, sb_page, tb_page); 
 
-    
     return( rc);
     /*
      *

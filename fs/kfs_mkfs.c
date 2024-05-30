@@ -332,18 +332,59 @@ int build_sinodes( int fd, blocks_calc_t *bc, char *sbp, char *slp){
     kfs_extent_t extent;
     char *p;
     kfs_superblock_t *sb = (kfs_superblock_t *) sbp; 
-    kfs_extent_header_t *ex_header = ( kfs_extent_header_t *) slp; 
-    int rc; 
-    uint64_t i, n, sinodes_per_block;
- 
+    kfs_extent_header_t *ex_header = ( kfs_extent_header_t *) slp;
+    kfs_sinode_t *sino;
+    int rc, block_num; 
+    uint64_t i, n, sinodes_per_block, sino_num, b;
+    
+
+
+    current_time = time( NULL);
+
     n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
     sinodes_per_block = n / sizeof( kfs_sinode_t);
 
-   
     ex_header->eh_magic = KFS_SLOTS_DATA_MAGIC;
     ex_header->eh_entries_in_use = 1;
     ex_header->eh_entries_capacity = sinodes_per_block;
     ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_INDEX;
+    i = sizeof( kfs_extent_header_t);
+
+    n = 0;
+    while( i < KFS_BLOCKSIZE){
+        p = &slp[i];
+        sino = ( kfs_sinode_t *) p;
+        memset( ( void *) sino, 0, sizeof( kfs_sinode_t));
+        sino->si_a_time = current_time;
+        sino->si_c_time = current_time;
+        sino->si_m_time = current_time;
+        sino->si_slot_id = 0xfffffffe;
+        sino->si_id = n++;
+        i += sizeof( kfs_sinode_t);
+    }
+
+    block_num = 1;
+    sino_num = n;
+    page_write( fd, sbp, block_num);
+    block_num++;
+
+    memset( (void *) sbp, 0, KFS_BLOCKSIZE);
+    while( block_num < bc->out_sinodes_table_in_blocks){
+        i = 0;
+
+        while( i < KFS_BLOCKSIZE){
+            p = &slp[i];
+            sino = ( kfs_sinode_t *) p;
+            memset( ( void *) sino, 0, sizeof( kfs_sinode_t));
+            sino->si_id = sino_num++;
+            i += sizeof( kfs_sinode_t);
+        }
+
+        page_write( fd, sbp, block_num);
+        block_num++;
+    }
+
+
 
     return(0);
 }

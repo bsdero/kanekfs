@@ -4,7 +4,6 @@
 
 int main(){
     printf("kfs_extent_header_t=%ld\n", sizeof( kfs_extent_header_t));
-    printf("kfs_extent_entry_t=%ld\n", sizeof( kfs_extent_entry_t));
     printf("kfs_extent_t=%ld\n", sizeof( kfs_extent_t));
     printf("kfs_slot_t=%ld\n", sizeof( kfs_slot_t));
     printf("kfs_slot_data_t=%ld\n", sizeof( kfs_slot_data_t));

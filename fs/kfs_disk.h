@@ -33,7 +33,7 @@
  * data stored in the remaining bytes of this block, or in an group of 
  * extents.
  *
- * After a kfs_extent_header_t, we may have kfs_extent_entry_t entries or 
+ * After a kfs_extent_header_t, we may have kfs_extent_t entries or 
  * another struct descripting a slots/sinodes table or both. Depends on 
  * what are we using the extent for, and we know what to read an how depending
  * on the value in the field 'magic'. 
@@ -78,7 +78,7 @@
  *    enabled and eh_depth_level_is > 0. Like the leafs, the eh_entries_in_use
  *    and eh_entries_capacity fields descripts how many indexing entries
  *    we may store and how many are used in this block extent. The indexing 
- *    entries are stored in kfs_extent_entry_t data structures following the
+ *    entries are stored in kfs_extent_t data structures following the
  *    header. 
  * 4.-Additional data structures descripting data and possible table 
  *    headers are inmediately after the kfs_table_header_t. This depends on 
@@ -162,9 +162,8 @@ typedef struct{
     uint16_t ee_block_size; /* number of blocks covered by extent */
     uint16_t ee_log_size; /* number of logical units */
     uint32_t ee_log_addr; /* offset in logical units */
-}kfs_extent_entry_t;
+}kfs_extent_t;
 
-typedef kfs_extent_entry_t kfs_extent_t;
 
 
 /* All the metadata for nodes and edges in the graph are stored in 
@@ -219,7 +218,7 @@ typedef struct{ /* entry for the slots index. This structure helps to locate
     uint32_t slot_link_owner;
     uint32_t slot_flags;  /* the same flags than in slots.h in slot_t*/
 
-    kfs_extent_entry_t slot_extent;  /* extent with this slot entries.*/
+    kfs_extent_t slot_extent;  /* extent with this slot entries.*/
 }kfs_slot_t;
 
 
@@ -257,8 +256,8 @@ typedef struct{
 /* this is the super inode structure in disk */
 typedef struct{
 
-    kfs_extent_entry_t edges;  /* extent with edges.*/
-    kfs_extent_entry_t data;   /* extent with file data */
+    kfs_extent_t edges;  /* extent with edges.*/
+    kfs_extent_t data;   /* extent with file data */
     uint64_t si_a_time;
     uint64_t si_c_time;
     uint64_t si_m_time;
@@ -268,13 +267,12 @@ typedef struct{
     uint32_t si_id; /* super inode unique ID */
     uint32_t si_data_len; /* file size */
 
-    uint32_t si_edges_num;  /* total num of edges */
 
     /* cache flags may be used here */
     uint16_t si_flags;
     uint16_t si_gid;
     uint16_t si_uid;
-    uint16_t si_count;
+    uint16_t si_edges_num;
 
     uint32_t si_mode; 
 }kfs_sinode_t;

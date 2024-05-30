@@ -3,7 +3,7 @@ CFLAGS=-Wall -DUSER_SPACE -g
 CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
-TESTS=testdict testrand testhash testdh testgc testmap
+TESTS=testdict testrand testhash testdh testgc testmap testsizes
 
 TOOLS=kfs_mkfs
 
@@ -36,6 +36,9 @@ testgc: testgc.o gc.o dumphex.o
 testmap: testmap.o map.o 
 	$(CC) -o testmap testmap.o map.o
 
+testsizes: sizes.o
+	$(CC) -o testsizes sizes.o
+
 dumphex.o:
 	$(CC) -c dumphex.c $(CFLAGS)
 
@@ -44,6 +47,9 @@ hash.o:
 
 gc.o:
 	$(CC) -c gc.c $(CFLAGS)
+
+sizes.o:
+	$(CC) -c sizes.c $(CFLAGS)
 
 clean:
 	@UNAME=`uname|egrep -i "cygwin|windows"`; \

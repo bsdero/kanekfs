@@ -151,7 +151,8 @@ typedef struct{
     uint16_t eh_flags;
     uint16_t eh_depth_tree_level; /* how many levels are in the tree below */
     uint64_t eh_blocks_count;
-}kfs_extent_header_t; 
+    uint64_t spare;
+}kfs_extent_header_t;
 
 /*
  * This is the extent on-disk structure. It points to other index or leaf 
@@ -213,13 +214,13 @@ typedef kfs_extent_entry_t kfs_extent_t;
  */
 typedef struct{ /* entry for the slots index. This structure helps to locate
                    slot data faster */
-    uint64_t slot_id;     /* slot ID. Should be stored in sequence. */
-    uint64_t slot_sino_owner;
+    uint32_t slot_id;     /* slot ID. Should be stored in sequence. */
+    uint32_t slot_sino_owner;
     uint32_t slot_link_owner;
     uint32_t slot_flags;  /* the same flags than in slots.h in slot_t*/
 
     kfs_extent_entry_t slot_extent;  /* extent with this slot entries.*/
-}kfs_slot_t; 
+}kfs_slot_t;
 
 
 /* this is the real dictionary data. */
@@ -258,26 +259,25 @@ typedef struct{
 
     kfs_extent_entry_t edges;  /* extent with edges.*/
     kfs_extent_entry_t data;   /* extent with file data */
-    time_t si_a_time;
-    time_t si_c_time;
-    time_t si_m_time;
+    uint64_t si_a_time;
+    uint64_t si_c_time;
+    uint64_t si_m_time;
 
 
-    uint64_t si_slot_id; /* slot ID */
-    uint64_t si_id; /* super inode unique ID */
-    uint64_t si_data_len; /* file size */
+    uint32_t si_slot_id; /* slot ID */
+    uint32_t si_id; /* super inode unique ID */
+    uint32_t si_data_len; /* file size */
 
     uint32_t si_edges_num;  /* total num of edges */
 
     /* cache flags may be used here */
-    uint32_t si_flags;
-    uint32_t si_gid;
-    uint32_t si_uid;
-
+    uint16_t si_flags;
+    uint16_t si_gid;
+    uint16_t si_uid;
+    uint16_t si_count;
 
     uint32_t si_mode; 
-    uint32_t si_count;
-}kfs_sinode_t; 
+}kfs_sinode_t;
 
 
 typedef struct{
@@ -307,17 +307,15 @@ typedef struct{
     /* bit map capacity in blocks, taken and extents. Cache is not used. */
     kfs_blockmap_t sb_blockmap;
 
-    time_t sb_c_time;
-    time_t sb_m_time;
-    time_t sb_a_time; 
+    uint64_t sb_c_time;
+    uint64_t sb_m_time;
+    uint64_t sb_a_time; 
 
 
 #define KFS_SB_SINODES_NUM_FIXED                   0x0001
 #define KFS_SB_SLOTS_NUM_FIXED                     0x0002
 #define KFS_SB_AUTO_DEFRAG                         0x0004
     
-    uint64_t flags;
-
     /* block dev */
     int dev;
 }kfs_superblock_t;

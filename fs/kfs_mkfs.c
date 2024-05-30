@@ -532,14 +532,16 @@ int blocks_calc( blocks_calc_t *bc){
     uint64_t slots_blocks, slots_map_blocks, slots_result;
     uint64_t sinodes_per_block;
     uint64_t sinodes_blocks, sinodes_map_blocks, sinodes_result;
-
+    uint64_t slots_in_1st_block, sinodes_in_1st_block;
     uint64_t bits_per_block, n;
 
-    n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
-    slots_per_block = n / sizeof( kfs_slot_t);
+    n =  KFS_BLOCKSIZE - sizeof( kfs_extent_header_t); 
+    slots_in_1st_block = n / sizeof( kfs_slot_t);
+    slots_per_block = KFS_BLOCKSIZE / sizeof( kfs_slot_t);
 
-    n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
-    sinodes_per_block = n / sizeof( kfs_sinode_t);
+
+    sinodes_in_1st_block = n / sizeof( kfs_sinode_t);
+    sinodes_per_block = KFS_BLOCKSIZE / sizeof( kfs_sinode_t);
  
 
     /* now calculate how many bits per block can have our bitmap */
@@ -570,7 +572,8 @@ int blocks_calc( blocks_calc_t *bc){
         slots_blocks -= slots_map_blocks;
 
         /* now get the real slots number we can have */
-        slots_result = slots_blocks * slots_per_block;
+        slots_result = ((slots_blocks - 1) * slots_per_block) + 
+                       slots_in_1st_block;
 
 
         bc->out_slots_bitmap_blocks_num = slots_map_blocks;
@@ -587,7 +590,8 @@ int blocks_calc( blocks_calc_t *bc){
         sinodes_blocks -= sinodes_map_blocks;
 
         /* now get the real super inodes number we can have */
-        sinodes_result = sinodes_blocks * sinodes_per_block;
+        sinodes_result = ((sinodes_blocks - 1) * sinodes_per_block) + 
+                         sinodes_in_1st_block;
 
 
         bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
@@ -595,8 +599,8 @@ int blocks_calc( blocks_calc_t *bc){
         bc->out_sinodes_num = sinodes_result;
     }else{
         if( bc->in_sinodes_num != 0){
-            sinodes_blocks = ( bc->in_sinodes_num / 
-                            sinodes_per_block) + 1;
+            sinodes_blocks = ( (bc->in_sinodes_num - sinodes_in_1st_block) / 
+                               sinodes_per_block) + 2;
             sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + 1;
             sinodes_blocks -= sinodes_map_blocks;
             bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
@@ -606,8 +610,8 @@ int blocks_calc( blocks_calc_t *bc){
         }
 
         if( bc->in_slots_num != 0){
-            slots_blocks = ( bc->in_slots_num  / 
-                                slots_per_block) + 1;
+            slots_blocks = ( (bc->in_slots_num - slots_in_1st_block) / 
+                                slots_per_block) + 2;
             /* how many blocks our slots map need */
             slots_map_blocks = ( slots_blocks / bits_per_block) + 1;
             slots_blocks -= slots_map_blocks;

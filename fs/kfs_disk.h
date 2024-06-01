@@ -255,16 +255,16 @@ typedef struct{
 
 /* this is the super inode structure in disk */
 typedef struct{
-
+    uint64_t si_id; /* super inode unique ID */
     kfs_extent_t edges;  /* extent with edges.*/
     kfs_extent_t data;   /* extent with file data */
+ 
     uint64_t si_a_time;
     uint64_t si_c_time;
     uint64_t si_m_time;
 
 
     uint32_t si_slot_id; /* slot ID */
-    uint32_t si_id; /* super inode unique ID */
     uint32_t si_data_len; /* file size */
 
 

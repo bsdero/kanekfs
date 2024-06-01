@@ -365,10 +365,10 @@ int build_sinodes( int fd, blocks_calc_t *bc, char *sbp, char *slp){
 
     block_num = 1;
     sino_num = n;
-    page_write( fd, sbp, block_num);
+    page_write( fd, slp, block_num);
     block_num++;
 
-    memset( (void *) sbp, 0, KFS_BLOCKSIZE);
+    memset( (void *) slp, 0, KFS_BLOCKSIZE);
     while( block_num < bc->out_sinodes_table_in_blocks){
         i = 0;
 
@@ -380,7 +380,7 @@ int build_sinodes( int fd, blocks_calc_t *bc, char *sbp, char *slp){
             i += sizeof( kfs_sinode_t);
         }
 
-        page_write( fd, sbp, block_num);
+        page_write( fd, slp, block_num);
         block_num++;
     }
 

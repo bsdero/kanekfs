@@ -229,17 +229,17 @@ uint64_t get_bd_device_size( char *fname){
 }
 
 
-char *page_alloc(){
+char *pages_alloc( int n){
     char *page;
 
-    page = malloc( KFS_BLOCKSIZE);
+    page = malloc( KFS_BLOCKSIZE * n);
     if( page == NULL){
         TRACE_SYSERR( "malloc error.\n");
         return( NULL);
     }
 
     /* Fill the whole file with zeroes */
-    memset( page, 0, KFS_BLOCKSIZE);
+    memset( page, 0, (KFS_BLOCKSIZE * n) );
     return( page);
 }
 
@@ -305,7 +305,7 @@ int build_superblock( int fd, blocks_calc_t *bc){
     /* populate the sinode index extent and its map extent */
     sb->sb_si_table.capacity = bc->out_sinodes_num;
     sb->sb_si_table.in_use = 1;
-    extent.ee_block_addr = bc->out_slots_table_in_blocks + 1; 
+    extent.ee_block_addr = bc->out_slots_table_in_blocks + 2; 
     extent.ee_block_size = bc->out_sinodes_table_in_blocks;
     extent.ee_log_size = bc->out_sinodes_num;
     extent.ee_log_addr = 0;
@@ -320,7 +320,7 @@ int build_superblock( int fd, blocks_calc_t *bc){
     /* populate the map extent */
     extent.ee_block_addr = fs_map_block;
     extent.ee_block_size = bc->out_bitmap_size_in_blocks;
-    extent.ee_log_size = bc->out_bitmap_size_in_blocks;
+    extent.ee_log_size = bc->in_file_size_in_blocks;
     extent.ee_log_addr = 0;
     sb->sb_blockmap.bitmap_extent = extent;
     memset( ( void *) &extent, 0, sizeof( kfs_extent_t));
@@ -340,21 +340,24 @@ int build_superblock( int fd, blocks_calc_t *bc){
 
 
 int build_map( int fd, blocks_calc_t *bc){
-    time_t current_time;
-    kfs_extent_t extent;
-    kfs_superblock_t *sb = (kfs_superblock_t *) pages[PG_SB]; 
     kfs_extent_header_t *ex_header = NULL;
-    char *p;
-    int rc; 
-    uint64_t i; 
-    ex_header = (kfs_extent_header_t *) pages[PG_MAP];
-    p = ( char *) ex_header; 
+    char *p, *bitmap;
+    int rc = 0; 
 
-    ex_header->eh_magic = KFS_SLOTS_BITMAP_MAGIC;
+    p = pages_alloc( bc->out_bitmap_size_in_blocks);
+    pages[PG_MAP] = p;
+    ex_header = (kfs_extent_header_t *) p;
+
+    ex_header->eh_magic = KFS_BLOCKMAP_MAGIC;
     ex_header->eh_entries_in_use = 0;
-    ex_header->eh_entries_capacity = bc->out_bitmap_size_in_blocks;
-    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_INDEX;
-    i = sizeof( kfs_extent_header_t);
+    ex_header->eh_entries_capacity = bc->in_file_size_in_blocks;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
+    bitmap = p + sizeof( kfs_extent_header_t);
+
+
+    /* set superblock */
+    bm_set_bit( ( unsigned char *) bitmap, bc->in_file_size_in_blocks, 0, 1);
+    ex_header->eh_entries_in_use = 1;
 
 
 
@@ -363,64 +366,123 @@ int build_map( int fd, blocks_calc_t *bc){
 
 int build_sinodes( int fd, blocks_calc_t *bc){
     time_t current_time;
-    kfs_extent_t extent;
-    kfs_superblock_t *sb = (kfs_superblock_t *) pages[PG_SB]; 
     kfs_extent_header_t *ex_header = NULL;
     kfs_sinode_t *sino;
-    int rc, block_num; 
-    uint64_t i, n, sinodes_per_block, sino_num, b;
+    int block_num; 
+    uint64_t i, n, sinodes_per_block, sino_num;
     char *p, *slp;
+    unsigned char *bitmap;
+    uint64_t sinode_map_block, slot_map_block, fs_map_block;
 
+
+    /* set maps addresses */
+    fs_map_block = bc->in_file_size_in_blocks - 
+                   bc->out_bitmap_size_in_blocks;
+
+    slot_map_block = fs_map_block - bc->out_slots_bitmap_blocks_num;
+    sinode_map_block = slot_map_block - bc->out_sinodes_bitmap_blocks_num;
+
+
+    slp = p = pages_alloc( 1);
     ex_header = (kfs_extent_header_t *) pages[PG_SINODES];
-    slp = ( char *) ex_header; 
 
     current_time = time( NULL);
 
     n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
     sinodes_per_block = n / sizeof( kfs_sinode_t);
 
-    ex_header->eh_magic = KFS_SLOTS_DATA_MAGIC;
+    /* fill in the first block of the sinodes table */
+    ex_header->eh_magic = KFS_SINODE_TABLE_MAGIC;
     ex_header->eh_entries_in_use = 1;
     ex_header->eh_entries_capacity = sinodes_per_block;
-    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_INDEX;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
     i = sizeof( kfs_extent_header_t);
 
-    n = 0;
-    while( i < KFS_BLOCKSIZE){
-        p = &slp[i];
-        sino = ( kfs_sinode_t *) p;
-        memset( ( void *) sino, 0, sizeof( kfs_sinode_t));
-        sino->si_a_time = current_time;
-        sino->si_c_time = current_time;
-        sino->si_m_time = current_time;
-        sino->si_slot_id = 0xfffffffe;
-        sino->si_id = n++;
+    /* fill in the first inode */
+    sino_num = 0;
+    sino = ( kfs_sinode_t *) slp + sizeof( kfs_extent_header_t);
+    sino->si_a_time = current_time;
+    sino->si_c_time = current_time;
+    sino->si_m_time = current_time;
+    sino->si_slot_id = 0xfffffffe;
+    sino->si_id = n++;
+
+    /* fill in the other inodes */
+    i = sizeof( kfs_extent_header_t) + sizeof( kfs_sinode_t);
+    while( i < KFS_BLOCKSIZE && sino_num < bc->out_sinodes_num){
+        sino->si_id = sino_num++;
+        sino++;
         i += sizeof( kfs_sinode_t);
     }
 
-    block_num = 1;
-    sino_num = n;
-    page_write( fd, slp, block_num);
+    /* write the first block of the extent with the sinodes table */
+    block_num = 0;
+    page_write( fd, slp, block_num + 1);
     block_num++;
 
-    memset( (void *) slp, 0, KFS_BLOCKSIZE);
+    /* write out the remaining blocks of the table */
     while( block_num < bc->out_sinodes_table_in_blocks){
+        memset( (void *) slp, 0, KFS_BLOCKSIZE);
+ 
         i = 0;
+        sino = ( kfs_sinode_t *) p;
 
-        while( i < KFS_BLOCKSIZE){
-            p = &slp[i];
-            sino = ( kfs_sinode_t *) p;
-            memset( ( void *) sino, 0, sizeof( kfs_sinode_t));
+        while( i < KFS_BLOCKSIZE && sino_num < bc->out_sinodes_num){
             sino->si_id = sino_num++;
+            sino++;
             i += sizeof( kfs_sinode_t);
         }
 
-        page_write( fd, slp, block_num);
+        page_write( fd, p, block_num + 1);
         block_num++;
     }
+    free( p);
 
 
+    /* now on to the super inodes map */
+    slp = p = pages_alloc( bc->out_sinodes_bitmap_blocks_num);
 
+
+    /* fill in the super inodes map */
+    memset( (void *) p, 0, KFS_BLOCKSIZE);
+    ex_header = (kfs_extent_header_t *) p;
+
+    ex_header->eh_magic = KFS_SINODE_BITMAP_MAGIC;
+    ex_header->eh_entries_in_use = 1;
+    ex_header->eh_entries_capacity = bc->out_sinodes_num;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
+    bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
+
+    bm_set_bit( ( unsigned char *) bitmap, bc->out_sinodes_num, 0, 1);
+    for( i = 0; i < bc->out_sinodes_bitmap_blocks_num; i++){
+        page_write( fd, slp, sinode_map_block + i);
+        slp += KFS_BLOCKSIZE;
+    }
+
+    free( p);
+
+    /* update the file system block map */
+    p = pages[PG_MAP];
+    ex_header = (kfs_extent_header_t *) p;
+    bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
+
+
+    /* mark the bits corresponding to the super inodes table */
+    bm_set_extent( bitmap, 
+                   bc->in_file_size_in_blocks, 
+                   1,
+                   bc->out_sinodes_table_in_blocks,
+                   1);
+    ex_header->eh_entries_in_use += bc->out_sinodes_table_in_blocks;
+  
+    /* mark the bits corresponding to the super inodes map */
+    bm_set_extent( bitmap, 
+                   bc->in_file_size_in_blocks, 
+                   sinode_map_block,
+                   bc->out_sinodes_bitmap_blocks_num,
+                   1);
+    ex_header->eh_entries_in_use += bc->out_sinodes_bitmap_blocks_num;
+ 
     return(0);
 }
 
@@ -439,7 +501,7 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
         return( -1);
     }
 
-    page = page_alloc();
+    page = pages_alloc( 1);
     if( page == NULL){
         close( fd);
         exit(-1);
@@ -455,15 +517,11 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
 
 
 
-    page[PG_SB] = page;
+    pages[PG_SB] = page;
     rc = build_superblock( fd, bc);
 
-    page = page_alloc();
-    page[PG_MAP] = page;
     rc = build_map( fd, bc);
 
-    page = page_alloc();
-    page[PG_SINODES] = page; 
     rc = build_sinodes( fd, bc); 
 
     return( rc);
@@ -710,7 +768,7 @@ int blocks_calc( blocks_calc_t *bc){
         /* minus slots and sinodes part 
         bc->in_file_size_in_blocks -= total_blocks_required; 
         */
-    bc->in_file_size_in_mbytes = bc->in_file_size_in_blocks / 128;
+        bc->in_file_size_in_mbytes = bc->in_file_size_in_blocks / 128;
         total_blocks_required += 1;
     }
 

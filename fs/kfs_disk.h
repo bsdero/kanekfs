@@ -132,10 +132,12 @@ typedef struct{
 //#define KFS_SLOTS_TABLE_MAGIC                      0xdecaf
 #define KFS_SLOTS_DATA_MAGIC                       0xc0ffee
 
-#define KFS_SINODE_ROOT_MAGIC                      0xc001beb
+//#define KFS_SINODE_ROOT_MAGIC                      0xc001beb
 #define KFS_SINODE_BITMAP_MAGIC                    0xbad50da
-//#define KFS_SINODE_TABLE_MAGIC                     0xcafe
-#define KFS_SINODE_DATA_MAGIC                      0xc0cac01a
+#define KFS_SINODE_TABLE_MAGIC                     0x00cafe
+#define KFS_SINODE_DATA_MAGIC                      0xcafe01e;
+
+#define KFS_BLOCKMAP_MAGIC                         0x0c01a7e;
 
 
     uint32_t eh_magic; /* table type */

@@ -292,6 +292,11 @@ typedef kfs_table_t kfs_blockmap_t;
 typedef struct{
     uint64_t sb_magic; 
     uint32_t sb_version;
+
+#define KFS_SB_SINODES_NUM_FIXED                   0x0001
+#define KFS_SB_SLOTS_NUM_FIXED                     0x0002
+#define KFS_SB_AUTO_DEFRAG                         0x0004
+
     uint32_t sb_flags;
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
     uint64_t sb_blocksize;
@@ -302,17 +307,12 @@ typedef struct{
     /* slots capacity, used, cache and extents */
     kfs_slot_table_t sb_slot_table;
 
-    /* bit map capacity in blocks, taken and extents. Cache is not used. */
+    /* bit map capacity in blocks taken and extents. Cache is not used. */
     kfs_blockmap_t sb_blockmap;
 
     uint64_t sb_c_time;
     uint64_t sb_m_time;
     uint64_t sb_a_time; 
-
-
-#define KFS_SB_SINODES_NUM_FIXED                   0x0001
-#define KFS_SB_SLOTS_NUM_FIXED                     0x0002
-#define KFS_SB_AUTO_DEFRAG                         0x0004
     
     /* block dev */
     int dev;

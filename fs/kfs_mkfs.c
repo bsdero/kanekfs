@@ -55,6 +55,18 @@ typedef struct{
 }blocks_calc_t;
 
 
+#define PG_SB                            0
+#define PG_MAP                           1
+#define PG_SINODES                       2
+#define PG_SINOMAP                       3
+#define PG_SLOTS                         4
+#define PG_SLOTMAP                       5
+#define PG_SPARE                         6
+
+char *pages[]={ NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+
+
+
 int display_help(){
     char *help[]={
         "Usage: kfs_mkfs [options] file_name",
@@ -240,12 +252,12 @@ int page_write( int fd, char *page, int block_num){
 }
 
 
-int build_superblock( int fd, blocks_calc_t *bc, char *sbp){
+int build_superblock( int fd, blocks_calc_t *bc){
     time_t current_time;
     kfs_extent_t extent;
-    char *p;
-    kfs_superblock_t *sb = (kfs_superblock_t *) sbp; 
+    kfs_superblock_t *sb = (kfs_superblock_t *) pages[PG_SB]; 
     int rc; 
+    char *p;
 
 
     /*mx_inode_t root_i;*/    
@@ -261,7 +273,7 @@ int build_superblock( int fd, blocks_calc_t *bc, char *sbp){
     sinode_map_block = slot_map_block - bc->out_sinodes_bitmap_blocks_num;
 
     /* Build the super block */ 
-    memset( (void *) sbp, 0, sizeof( kfs_superblock_t ));
+    memset( (void *) sb, 0, sizeof( kfs_superblock_t ));
     current_time = time( NULL);
     sb->sb_magic = KFS_MAGIC;
     sb->sb_version = 0x000001;
@@ -310,14 +322,14 @@ int build_superblock( int fd, blocks_calc_t *bc, char *sbp){
     extent.ee_block_size = bc->out_bitmap_size_in_blocks;
     extent.ee_log_size = bc->out_bitmap_size_in_blocks;
     extent.ee_log_addr = 0;
-    sb->sb_si_table.bitmap_extent = extent;
+    sb->sb_blockmap.bitmap_extent = extent;
     memset( ( void *) &extent, 0, sizeof( kfs_extent_t));
-    sb->sb_si_table.table_extent = extent;
+    sb->sb_blockmap.table_extent = extent;
  
-    p = sbp;
+    p = ( char *) sb;
     p += 512; 
     strcpy( p, secret);
-    rc = page_write( fd, sbp, 0);
+    rc = page_write( fd, (void *) sb, 0);
     if( rc != 0){
         TRACE_ERR( "Coult not write\n");
         exit(-1);
@@ -327,17 +339,40 @@ int build_superblock( int fd, blocks_calc_t *bc, char *sbp){
 }
 
 
-int build_sinodes( int fd, blocks_calc_t *bc, char *sbp, char *slp){
+int build_map( int fd, blocks_calc_t *bc){
     time_t current_time;
     kfs_extent_t extent;
+    kfs_superblock_t *sb = (kfs_superblock_t *) pages[PG_SB]; 
+    kfs_extent_header_t *ex_header = NULL;
     char *p;
-    kfs_superblock_t *sb = (kfs_superblock_t *) sbp; 
-    kfs_extent_header_t *ex_header = ( kfs_extent_header_t *) slp;
+    int rc; 
+    uint64_t i; 
+    ex_header = (kfs_extent_header_t *) pages[PG_MAP];
+    p = ( char *) ex_header; 
+
+    ex_header->eh_magic = KFS_SLOTS_BITMAP_MAGIC;
+    ex_header->eh_entries_in_use = 0;
+    ex_header->eh_entries_capacity = bc->out_bitmap_size_in_blocks;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_INDEX;
+    i = sizeof( kfs_extent_header_t);
+
+
+
+    return(rc);
+}
+
+int build_sinodes( int fd, blocks_calc_t *bc){
+    time_t current_time;
+    kfs_extent_t extent;
+    kfs_superblock_t *sb = (kfs_superblock_t *) pages[PG_SB]; 
+    kfs_extent_header_t *ex_header = NULL;
     kfs_sinode_t *sino;
     int rc, block_num; 
     uint64_t i, n, sinodes_per_block, sino_num, b;
-    
+    char *p, *slp;
 
+    ex_header = (kfs_extent_header_t *) pages[PG_SINODES];
+    slp = ( char *) ex_header; 
 
     current_time = time( NULL);
 
@@ -394,7 +429,7 @@ int build_sinodes( int fd, blocks_calc_t *bc, char *sbp, char *slp){
 int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
     int fd, rc = 0;
     uint64_t i;
-    char *page, *sb_page, *tb_page;
+    char *page;
 
 
 
@@ -416,15 +451,20 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
         write( fd, page, KFS_BLOCKSIZE);
         lseek( fd, 0, SEEK_END);
     }
-
-
     fsync( fd);
-    sb_page = page;
 
-    rc = build_superblock( fd, bc, sb_page);
 
-    tb_page = page_alloc();
-    rc = build_sinodes( fd, bc, sb_page, tb_page); 
+
+    page[PG_SB] = page;
+    rc = build_superblock( fd, bc);
+
+    page = page_alloc();
+    page[PG_MAP] = page;
+    rc = build_map( fd, bc);
+
+    page = page_alloc();
+    page[PG_SINODES] = page; 
+    rc = build_sinodes( fd, bc); 
 
     return( rc);
     /*

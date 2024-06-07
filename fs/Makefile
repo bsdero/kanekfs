@@ -1,5 +1,5 @@
 
-CFLAGS=-Wall -DUSER_SPACE -g
+CFLAGS=-Wall -DUSER_SPACE -g -O0
 CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)

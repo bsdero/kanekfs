@@ -26,6 +26,24 @@
 })
 #endif
 
+#define OPT_SIZE                         0x0001
+#define OPT_NUM_SLOTS                    0x0002
+#define OPT_NUM_SINODES                  0x0004
+#define OPT_CALCULATE                    0x0008
+#define OPT_DUMP                         0x0010
+#define OPT_PERCENTAGE                   0x0020
+#define OPT_VERBOSE                      0x0040
+#define OPT_HELP                         0x0080
+
+#define MKFS_CREATE_FILE                 0x0100
+#define MKFS_IS_BLOCKDEVICE              0x0200
+#define MKFS_IS_REGULAR_FILE             0x0400
+
+#define MKFS_DEFAULT_PERCENTAGE          10
+
+
+
+
 uint64_t blocks_per_block = KFS_BLOCKSIZE * 8;
 typedef struct{
     char filename[240];
@@ -384,6 +402,7 @@ int build_sinodes( int fd, blocks_calc_t *bc){
 
 
     slp = p = pages_alloc( 1);
+    pages[PG_SINODES] = p;
     ex_header = (kfs_extent_header_t *) pages[PG_SINODES];
 
     current_time = time( NULL);
@@ -493,11 +512,16 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
     uint64_t i;
     char *page;
 
-
+    if( options->flags & MKFS_CREATE_FILE){
+        rc = create_file( options->filename);
+        if( rc != 0){
+            return( rc);
+        }
+    }
 
     fd = open( options->filename, O_RDWR );
     if( fd < 0){
-        perror( "ERROR: Could not open file\n");
+        TRACE_ERR( "ERROR: Could not open file '%s'\n", options->filename);
         return( -1);
     }
 
@@ -511,7 +535,7 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
     lseek( fd, 0, SEEK_SET);
     for( i = 0; i < bc->in_file_size_in_blocks; i++){
         write( fd, page, KFS_BLOCKSIZE);
-        lseek( fd, 0, SEEK_END);
+        //lseek( fd, 0, SEEK_END);
     }
     fsync( fd);
 
@@ -789,21 +813,6 @@ int parse_opts( int argc, char **argv, options_t *options){
     int rc;
     int need_file = 1;
 
-#define OPT_SIZE                         0x0001
-#define OPT_NUM_SLOTS                    0x0002
-#define OPT_NUM_SINODES                  0x0004
-#define OPT_CALCULATE                    0x0008
-#define OPT_DUMP                         0x0010
-#define OPT_PERCENTAGE                   0x0020
-#define OPT_VERBOSE                      0x0040
-#define OPT_HELP                         0x0080
-
-#define MKFS_CREATE_FILE                 0x0100
-#define MKFS_IS_BLOCKDEVICE              0x0200
-#define MKFS_IS_REGULAR_FILE             0x0400
-
-#define MKFS_DEFAULT_PERCENTAGE          10
-
     flags = 0;
     char opc[] = "s:i:n:cdp:vh";
     memset( (void *) options, 0, sizeof( options_t));
@@ -943,7 +952,7 @@ int parse_opts( int argc, char **argv, options_t *options){
     }
 
 
-    
+    TRACE("need_file=%d\n", need_file);
     if( need_file == 1){
         rc = stat( options->filename, &st);
         if( rc != 0){
@@ -1043,7 +1052,7 @@ int main( int argc, char **argv){
        exit( 0);
     }
 
- 
+    TRACE("ok1\n");
     rc = build_filesystem_in_file( &options, &blocks_results); 
     if( rc != 0){
         fprintf( stderr, "ERROR: Failed to build a filesystem\n");

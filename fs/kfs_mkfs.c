@@ -26,20 +26,20 @@
 })
 #endif
 
-#define OPT_SIZE                         0x0001
-#define OPT_NUM_SLOTS                    0x0002
-#define OPT_NUM_SINODES                  0x0004
-#define OPT_CALCULATE                    0x0008
-#define OPT_DUMP                         0x0010
-#define OPT_PERCENTAGE                   0x0020
-#define OPT_VERBOSE                      0x0040
-#define OPT_HELP                         0x0080
+#define OPT_SIZE                                   0x0001
+#define OPT_NUM_SLOTS                              0x0002
+#define OPT_NUM_SINODES                            0x0004
+#define OPT_CALCULATE                              0x0008
+#define OPT_DUMP                                   0x0010
+#define OPT_PERCENTAGE                             0x0020
+#define OPT_VERBOSE                                0x0040
+#define OPT_HELP                                   0x0080
 
-#define MKFS_CREATE_FILE                 0x0100
-#define MKFS_IS_BLOCKDEVICE              0x0200
-#define MKFS_IS_REGULAR_FILE             0x0400
+#define MKFS_CREATE_FILE                           0x0100
+#define MKFS_IS_BLOCKDEVICE                        0x0200
+#define MKFS_IS_REGULAR_FILE                       0x0400
 
-#define MKFS_DEFAULT_PERCENTAGE          10
+#define MKFS_DEFAULT_PERCENTAGE                    10
 
 
 
@@ -73,16 +73,20 @@ typedef struct{
 }blocks_calc_t;
 
 
-#define PG_SB                            0
-#define PG_MAP                           1
-#define PG_SINODES                       2
-#define PG_SINOMAP                       3
-#define PG_SLOTS                         4
-#define PG_SLOTMAP                       5
-#define PG_SPARE                         6
+#define PG_SB                                      0
+#define PG_MAP                                     1
 
-char *pages[]={ NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+char *pages[]={ NULL, NULL};
 
+options_t options;
+blocks_calc_t blocks_calc;
+
+#define PRINTV(fmt,...)          {                                          \
+                                     if( options.flags & OPT_VERBOSE){      \
+                                        fprintf( stdout,                    \
+                                                 fmt"\n", ##__VA_ARGS__);   \
+                                     }                                      \
+                                 } \
 
 
 int display_help(){
@@ -270,18 +274,18 @@ int page_write( int fd, char *page, int block_num){
 }
 
 
-int build_superblock( int fd, blocks_calc_t *bc){
+int build_superblock( int fd){
     time_t current_time;
     kfs_extent_t extent;
     kfs_superblock_t *sb = (kfs_superblock_t *) pages[PG_SB]; 
     int rc; 
     char *p;
-
-
-    /*mx_inode_t root_i;*/    
+    blocks_calc_t *bc = &blocks_calc;
     char secret[] = "Good! U found the secret message!! 1234567890";
     uint64_t sinode_map_block, slot_map_block, fs_map_block;
 
+
+    PRINTV("-Building superblock");
 
     /* set maps addresses */
     fs_map_block = bc->in_file_size_in_blocks - 
@@ -347,9 +351,10 @@ int build_superblock( int fd, blocks_calc_t *bc){
     p = ( char *) sb;
     p += 512; 
     strcpy( p, secret);
+    PRINTV("    -Write Superblock in block #0")
     rc = page_write( fd, (void *) sb, 0);
     if( rc != 0){
-        TRACE_ERR( "Coult not write\n");
+        TRACE_ERR( "Could not write\n");
         exit(-1);
     }
 
@@ -357,10 +362,13 @@ int build_superblock( int fd, blocks_calc_t *bc){
 }
 
 
-int build_map( int fd, blocks_calc_t *bc){
+int build_map( int fd){
     kfs_extent_header_t *ex_header = NULL;
     char *p, *bitmap;
+    blocks_calc_t *bc = &blocks_calc;
     int rc = 0; 
+
+    PRINTV("-Building Filesystem Block Map");
 
     p = pages_alloc( bc->out_bitmap_size_in_blocks);
     pages[PG_MAP] = p;
@@ -382,7 +390,7 @@ int build_map( int fd, blocks_calc_t *bc){
     return(rc);
 }
 
-int build_sinodes( int fd, blocks_calc_t *bc){
+int build_sinodes( int fd){
     time_t current_time;
     kfs_extent_header_t *ex_header = NULL;
     kfs_sinode_t *sino;
@@ -390,8 +398,11 @@ int build_sinodes( int fd, blocks_calc_t *bc){
     uint64_t i, n, sinodes_per_block, sino_num;
     char *p, *slp;
     unsigned char *bitmap;
+    blocks_calc_t *bc = &blocks_calc;
     uint64_t sinode_map_block, slot_map_block, fs_map_block;
 
+
+    PRINTV("-Building Super inodes table");
 
     /* set maps addresses */
     fs_map_block = bc->in_file_size_in_blocks - 
@@ -402,8 +413,7 @@ int build_sinodes( int fd, blocks_calc_t *bc){
 
 
     slp = p = pages_alloc( 1);
-    pages[PG_SINODES] = p;
-    ex_header = (kfs_extent_header_t *) pages[PG_SINODES];
+    ex_header = (kfs_extent_header_t *) p;
 
     current_time = time( NULL);
 
@@ -435,12 +445,11 @@ int build_sinodes( int fd, blocks_calc_t *bc){
     }
 
     /* write the first block of the extent with the sinodes table */
-    block_num = 0;
-    page_write( fd, slp, block_num + 1);
-    block_num++;
+    block_num = 1;
+    page_write( fd, slp, block_num++);
 
     /* write out the remaining blocks of the table */
-    while( block_num < bc->out_sinodes_table_in_blocks){
+    while( block_num < (bc->out_sinodes_table_in_blocks+1)){
         memset( (void *) slp, 0, KFS_BLOCKSIZE);
  
         i = 0;
@@ -452,13 +461,19 @@ int build_sinodes( int fd, blocks_calc_t *bc){
             i += sizeof( kfs_sinode_t);
         }
 
-        page_write( fd, p, block_num + 1);
-        block_num++;
+        page_write( fd, p, block_num++);
     }
+
+    PRINTV("    -Writing SuperInodes table blocks: [%d-%d]",
+                1,
+                block_num - 1); 
+ 
     free( p);
 
 
     /* now on to the super inodes map */
+    PRINTV("-Building super inodes map");
+
     slp = p = pages_alloc( bc->out_sinodes_bitmap_blocks_num);
 
 
@@ -478,6 +493,10 @@ int build_sinodes( int fd, blocks_calc_t *bc){
         slp += KFS_BLOCKSIZE;
     }
 
+    PRINTV("    -Writing SuperInodes blocks map: [%lu-%lu]", 
+                sinode_map_block, 
+                sinode_map_block + i - 1);
+    
     free( p);
 
     /* update the file system block map */
@@ -505,23 +524,176 @@ int build_sinodes( int fd, blocks_calc_t *bc){
     return(0);
 }
 
- 
 
-int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
+int build_slots( int fd){
+    kfs_extent_header_t *ex_header = NULL;
+    kfs_slot_t *slot;
+    uint64_t block_num, i, n, slots_per_block, slot_num;
+    char *p, *slp;
+    unsigned char *bitmap;
+    blocks_calc_t *bc = &blocks_calc;
+    uint64_t slot_map_block, fs_map_block, liminf, limsup;
+
+
+    PRINTV("-Building Slots table");
+
+    /* set maps addresses */
+    fs_map_block = bc->in_file_size_in_blocks - 
+                   bc->out_bitmap_size_in_blocks;
+
+    slot_map_block = fs_map_block - bc->out_slots_bitmap_blocks_num;
+
+
+    slp = p = pages_alloc( 1);
+    ex_header = (kfs_extent_header_t *) p;
+
+    n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
+    slots_per_block = n / sizeof( kfs_slot_t);
+
+    /* fill in the first block of the slots table */
+    ex_header->eh_magic = KFS_SLOTS_TABLE_MAGIC;
+    ex_header->eh_entries_in_use = 0;
+    ex_header->eh_entries_capacity = slots_per_block;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
+    i = sizeof( kfs_extent_header_t);
+
+    /* fill in the slots */
+    slot_num = 0;
+    slot = ( kfs_slot_t *) slp + sizeof( kfs_extent_header_t);
+
+    while( i < KFS_BLOCKSIZE && slot_num < bc->out_slots_num){
+        slot->slot_id = slot_num++;
+        slot++;
+        i += sizeof( kfs_slot_t);
+    }
+
+    /* write the first block of the extent with the slots table */
+    block_num = bc->out_sinodes_table_in_blocks + 1;
+    liminf = block_num;
+    page_write( fd, slp, block_num++);
+
+    limsup = liminf + bc->out_slots_table_in_blocks;
+
+    /* write out the remaining blocks of the table */
+    while( block_num < limsup){
+        memset( (void *) slp, 0, KFS_BLOCKSIZE);
+ 
+        i = 0;
+        slot = ( kfs_slot_t *) p;
+
+        while( i < KFS_BLOCKSIZE && slot_num < bc->out_slots_num){
+            slot->slot_id = slot_num++;
+            slot++;
+            i += sizeof( kfs_slot_t);
+        }
+
+        page_write( fd, p, block_num++);
+    }
+    free( p);
+
+    PRINTV("    -Writing slots table blocks: [%lu-%lu]", 
+                liminf, 
+                limsup - 1);
+ 
+    /* now on to the super inodes map */
+    PRINTV("-Building slots map");
+
+    slp = p = pages_alloc( bc->out_slots_bitmap_blocks_num);
+
+
+    /* fill in the super inodes map */
+    memset( (void *) p, 0, KFS_BLOCKSIZE);
+    ex_header = (kfs_extent_header_t *) p;
+
+    ex_header->eh_magic = KFS_SLOTS_BITMAP_MAGIC;
+    ex_header->eh_entries_in_use = 0;
+    ex_header->eh_entries_capacity = bc->out_slots_num;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
+    bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
+
+    for( i = 0; i < bc->out_slots_bitmap_blocks_num; i++){
+        page_write( fd, slp, slot_map_block + i);
+        slp += KFS_BLOCKSIZE;
+    }
+    PRINTV("    -Writing Slots blocks map: [%lu-%lu]", 
+                slot_map_block, 
+                slot_map_block + i - 1);
+ 
+    free( p);
+
+    /* update the file system block map */
+    p = pages[PG_MAP];
+    ex_header = (kfs_extent_header_t *) p;
+    bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
+
+
+    /* mark the bits corresponding to the super inodes table */
+    bm_set_extent( bitmap, 
+                   bc->in_file_size_in_blocks, 
+                   bc->out_sinodes_table_in_blocks + 1,
+                   bc->out_slots_table_in_blocks,
+                   1);
+    ex_header->eh_entries_in_use += bc->out_slots_table_in_blocks;
+  
+    /* mark the bits corresponding to the super inodes map */
+    bm_set_extent( bitmap, 
+                   bc->in_file_size_in_blocks, 
+                   slot_map_block,
+                   bc->out_slots_bitmap_blocks_num,
+                   1);
+    ex_header->eh_entries_in_use += bc->out_slots_bitmap_blocks_num;
+ 
+    return(0);
+}
+
+
+int write_map(int fd){
+    char *p = pages[PG_MAP];
+    uint64_t i, block_num, fs_map_block, liminf, limsup; 
+    blocks_calc_t *bc = &blocks_calc;
+
+    PRINTV("-Writing block map");
+
+    /* set maps addresses */
+    fs_map_block = bc->in_file_size_in_blocks - bc->out_bitmap_size_in_blocks;
+    block_num = bc->out_bitmap_size_in_blocks;
+    liminf = fs_map_block;
+    for( i = 0; i < block_num; i++){
+        page_write( fd, p, fs_map_block++);
+        p += KFS_BLOCKSIZE;
+    }
+
+    limsup = fs_map_block - 1;
+
+    PRINTV("    -Writing KFS block map: [%lu-%lu]", 
+                 liminf, 
+                 limsup);
+    
+    fsync( fd);
+    free( pages[PG_MAP]);
+
+    return(0);
+}
+
+
+int build_filesystem_in_file(){
     int fd, rc = 0;
     uint64_t i;
     char *page;
-
-    if( options->flags & MKFS_CREATE_FILE){
-        rc = create_file( options->filename);
+    blocks_calc_t *bc = &blocks_calc;
+    
+    PRINTV("-Creating file");
+    if( options.flags & MKFS_CREATE_FILE){
+        rc = create_file( options.filename);
         if( rc != 0){
             return( rc);
         }
     }
 
-    fd = open( options->filename, O_RDWR );
+    PRINTV("-Writing file");
+    fd = open( options.filename, O_RDWR );
     if( fd < 0){
-        TRACE_ERR( "ERROR: Could not open file '%s'\n", options->filename);
+        TRACE_ERR( "ERROR: Could not open file '%s'\n", options.filename);
         return( -1);
     }
 
@@ -542,132 +714,47 @@ int build_filesystem_in_file( options_t *options, blocks_calc_t *bc){
 
 
     pages[PG_SB] = page;
-    rc = build_superblock( fd, bc);
-
-    rc = build_map( fd, bc);
-
-    rc = build_sinodes( fd, bc); 
-
-    return( rc);
-    /*
-     *
-    build_slots( kfs_superblock_t *sb, char *slots, char *slots_map);
-    write_slots( kfs_superblock_t *sb, char *slots, char *slots_map);
-
-    build_sinodes( kfs_superblock_t *sb, char *slots, char *slots_map);
-    write_sinodes( kfs_superblock_t *sb, char *slots, char *slots_map);
-
-    build_kfsmap( kfs_superblock_t *sb, char *slots, char *slots_map);
-    write_kfsmap( kfs_superblock_t *sb, char *slots, char *slots_map);
-
-    build_first_sinode()
-    build_first_slot()
-
-    write_superblock( kfs_superblock_t *sb);
-
-
-    sync( fd);
-    close( fd);
-
-    kfs_mount( dev);
-
-
-
-    sb.sb_slot_table.st_capacity = bc->out_slots_num;
-    sb.sb_slot_table.st_in_use = 1;
-    sb.sb_slot_table.st_table_extent. = 
-   
-
-    sb.sb_si_table.si_capacity = bc->out_sinodes_num;
-    sb.sb_si_table.si_in_use = 1;
-
-
-
-    sb.num_blocks = num_blocks; 
-    sb.used_inodes = 1;
-    sb.used_blocks = 2 + num_blocks_4_map; 
-     blockmap + superblock + 
-                                            * root inode data 
-    sb.block_map = blockmap_address;
-    sb.block_map_num = (uint64_t) num_blocks_4_map;
-    current_time = time( NULL);
-    sb.ctime = (uint64_t) current_time;
-    sb.active_root_inode_block = 0;
-    sb.active_root_inode_offset = KFS_ROOT_INODE_OFFSET;
-    memset( &sb.spare_bytes, 'x', sizeof( sb.spare_bytes));
-    strcpy( sb.spare_bytes, secret);
-
-     build the root inode 
-    memset( (void *) &root_i, 0, sizeof( root_i));
-    root_i.a_time = root_i.c_time = root_i.m_time = current_time; 
-    root_i.size = 0;
-    root_i.flags = MX_STORAGE_IS_EXTENT; 
-    root_i.num_blocks = 1; 
-    root_i.mode = S_IFDIR | 666;
-    root_i.num_links = 0;
-    root_i.uid = 0;
-    root_i.gid = 0;
-
-     just 1 block for the root directory info, for start  
-    root_i.storage.extents.extent[0].b_start = 1;
-    root_i.storage.extents.extent[0].b_num = 1;
-
-
-    copy the superblock and root inode data to the correct 
-    place in the memory block 
-    memset( p, 0, KFS_BLOCKSIZE);
-    memcpy( p, &sb, sizeof( sb));
-    memcpy( p + KFS_ROOT_INODE_OFFSET, &root_i, sizeof( root_i));
-
-    write the whole block to disk 
-    lseek( fd, 0, SEEK_SET);
-    write( fd, p, KFS_BLOCKSIZE);
-
-    printf(" -Wrote superblock and root inode\n");
-    free( p);
-
-    
-
-    * almost there, except we need to prepare the block map also. We need to
-     * mark block 0 as busy, as the superblock and root inode lives there.  
-     * Also the block 1 needs to be marked, as the root inode has an extent 
-     * pointing there. 
-     * The blockmap used blocks should be marked also. *
-    blockmap = malloc( KFS_BLOCKSIZE * num_blocks_4_map);
-    if( blockmap == NULL){
-        perror( "ERROR: malloc error.\n");
-        close( fd);
-        return( -1);
+    rc = build_superblock( fd);
+    if( rc < 0){
+        return( rc);
     }
 
-    memset( blockmap, 0, KFS_BLOCKSIZE * num_blocks_4_map);
 
-    * superblock and root inode *
-    bm_set_bit( blockmap, num_blocks, (uint64_t) 0, 1);
+    rc = build_map( fd);
+    if( rc < 0){
+        return( rc);
+    }
 
-    * superblock's data block *
-    bm_set_bit( blockmap, num_blocks, (uint64_t) 1, 1);
 
-    * used blocks map *
-    bm_set_extent( blockmap, 
-                   num_blocks, 
-                   blockmap_address, 
-                   num_blocks_4_map, 
-                   1);
+    rc = build_sinodes( fd); 
+    if( rc < 0){
+        return( rc);
+    }
 
-     
-    lseek( fd, blockmap_address * KFS_BLOCKSIZE, SEEK_SET);
-    write( fd, blockmap, KFS_BLOCKSIZE * num_blocks_4_map);
-    
-    close( fd);
-    free( blockmap);
-    printf(" -Wrote blockmap.\n");
-    return(0);
-    */
+
+    rc = build_slots( fd); 
+    if( rc < 0){
+        return( rc);
+    }
+
+
+    rc = write_map( fd);
+    if( rc < 0){
+        return( rc);
+    }
+
+   close( fd);
+
+    return( rc);
 }
 
-int blocks_calc_display( blocks_calc_t *bc){
+
+/* display calculations results */
+int blocks_results_display(){
+    blocks_calc_t *bc = &blocks_calc;
+
     printf("IN:\n");
+    printf("   Blocksize=%d\n", KFS_BLOCKSIZE);
     printf("   InodesNum=%lu\n", bc->in_sinodes_num);
     printf("   SlotsNum=%lu\n", bc->in_slots_num);
     printf("   FileSizeInMB=%lu\n", bc->in_file_size_in_mbytes);
@@ -689,7 +776,14 @@ int blocks_calc_display( blocks_calc_t *bc){
     return(0);
 }
 
-int blocks_calc( blocks_calc_t *bc){
+
+/* In function of the arguments passed, calculate how many slots and super
+ * inodes will be created, or the device size required. Also fill in 
+ * how many blocks are required for the corresponding tables and bitmaps. 
+ */
+int compute_blocks(){
+    blocks_calc_t *bc = &blocks_calc;
+
     uint64_t total_blocks_required = 0, bitmap_size_in_blocks = 0;
     uint64_t slots_per_block;
     uint64_t slots_blocks, slots_map_blocks, slots_result;
@@ -698,6 +792,23 @@ int blocks_calc( blocks_calc_t *bc){
     uint64_t slots_in_1st_block, sinodes_in_1st_block;
     uint64_t bits_per_block, n;
 
+    /* clean ddata structure */
+    memset( ( void *) bc, 0, sizeof( blocks_calc_t));
+
+    /* fill in sizes */
+    bc->in_file_size_in_blocks = options.size / KFS_BLOCKSIZE;
+    bc->in_file_size_in_mbytes = options.size / _1M;
+ 
+    if( options.flags & (OPT_NUM_SINODES|OPT_NUM_SLOTS)){
+        
+        bc->in_sinodes_num = options.sinodes_num; 
+        bc->in_slots_num = options.slots_num;
+    }
+    
+
+    bc->in_percentage = options.percentage;
+ 
+    /* do first real computations */
     n =  KFS_BLOCKSIZE - sizeof( kfs_extent_header_t); 
     slots_in_1st_block = n / sizeof( kfs_slot_t);
     slots_per_block = KFS_BLOCKSIZE / sizeof( kfs_slot_t);
@@ -710,23 +821,18 @@ int blocks_calc( blocks_calc_t *bc){
     /* now calculate how many bits per block can have our bitmap */
     bits_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) * 8;
 
-
+    /* given the file/device size, and the percentage, calculate how
+     * many super inodes and slots do we need */
     if( bc->in_sinodes_num == 0 && bc->in_slots_num == 0){
         total_blocks_required += 1; /* super block */
 
-
-        /* calculate how many slots ara available, from the file size 
-         * in blocks  */
-
-        /* calculate how many blocks for slots have we */
+        /* calculate how many blocks for slots do we have */
         slots_blocks = (uint64_t) ( (float)bc->in_file_size_in_blocks * 
                         (( float) bc->in_percentage / 100.0) / 2.0);
         sinodes_blocks = slots_blocks;  /* same for sinodes table blocks */
 
         /* sum the total blocks required now */
         total_blocks_required += slots_blocks + sinodes_blocks;
-
-        TRACE("slots_blocks=%lu, sinodes_blocks=%lu\n", slots_blocks, sinodes_blocks);
 
         /* how many blocks our slots map need */
         slots_map_blocks = ( slots_blocks / bits_per_block) + 1;
@@ -760,7 +866,9 @@ int blocks_calc( blocks_calc_t *bc){
         bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
         bc->out_sinodes_table_in_blocks = sinodes_blocks;
         bc->out_sinodes_num = sinodes_result;
-    }else{
+    }else{ /* we have a fixed number of super inodes and slots passed in
+              from the CLI, so calculate how many blocks are required and 
+              how big the file/device should  be. */
         if( bc->in_sinodes_num != 0){
             sinodes_blocks = ( (bc->in_sinodes_num - sinodes_in_1st_block) / 
                                sinodes_per_block) + 2;
@@ -797,7 +905,7 @@ int blocks_calc( blocks_calc_t *bc){
     }
 
 
-
+    /* now fill in the bitmap size in blocks and finish calculations */
     bitmap_size_in_blocks = (bc->in_file_size_in_blocks / bits_per_block) + 1;
     bc->out_bitmap_size_in_blocks = bitmap_size_in_blocks;
     total_blocks_required += bitmap_size_in_blocks;
@@ -807,7 +915,9 @@ int blocks_calc( blocks_calc_t *bc){
     return(0);
 }
 
-int parse_opts( int argc, char **argv, options_t *options){
+
+/* parse the passed options */
+int parse_opts( int argc, char **argv){
     int opt, flags; 
     struct stat st;
     int rc;
@@ -815,7 +925,7 @@ int parse_opts( int argc, char **argv, options_t *options){
 
     flags = 0;
     char opc[] = "s:i:n:cdp:vh";
-    memset( (void *) options, 0, sizeof( options_t));
+    memset( (void *) &options, 0, sizeof( options_t));
 
     if( argc == 0){
         fprintf(stderr, "ERROR: invalid number of arguments.\n");
@@ -828,19 +938,19 @@ int parse_opts( int argc, char **argv, options_t *options){
         switch (opt) {
             case 's':
                 flags |= OPT_SIZE;
-                strcpy( options->str_size, optarg);
+                strcpy( options.str_size, optarg);
                 break;
             case 'i':
                 flags |= OPT_NUM_SINODES;
-                strcpy( options->str_sinodes_num, optarg);
+                strcpy( options.str_sinodes_num, optarg);
                 break;
             case 'n':
                 flags |= OPT_NUM_SLOTS;
-                strcpy( options->str_slots_num, optarg);
+                strcpy( options.str_slots_num, optarg);
                 break;
             case 'p':
                 flags |= OPT_PERCENTAGE;
-                strcpy( options->str_percentage, optarg);
+                strcpy( options.str_percentage, optarg);
                 break;
             case 'd':
                 flags |= OPT_DUMP;
@@ -867,6 +977,8 @@ int parse_opts( int argc, char **argv, options_t *options){
         exit( 0);
     }
 
+    /* determine if the final file name is required. If we are just
+     * doing computations, this is not needed. */
     if( ( flags & (OPT_CALCULATE|OPT_NUM_SINODES|OPT_NUM_SLOTS)) ==
                   (OPT_CALCULATE|OPT_NUM_SINODES|OPT_NUM_SLOTS)){
         need_file = 0;
@@ -903,48 +1015,55 @@ int parse_opts( int argc, char **argv, options_t *options){
 
 
     if( need_file != 0){
-        strcpy( options->filename, argv[optind]);
+        strcpy( options.filename, argv[optind]);
     }
-    options->flags = flags;
 
-    if( options->flags & OPT_SIZE){
-        options->size = validate_size( options->str_size);
-        if( options->size == 0){
+    options.flags = flags;
+
+    /* validate the specified options */
+    if( options.flags & OPT_SIZE){
+        options.size = validate_size( options.str_size);
+        if( options.size == 0){
             fprintf( stderr, "ERROR: Size not valid\n");
             display_help();
             return( -1);
         }
-        if( options->size < 20971520){
-            fprintf( stderr, "ERROR: Invalid size, minimum is 20MBytes\n");
+#define MIN_FS                           10485760 /* 10 Mb */
+/*define MIN_FS                          20971520 */
+        
+        if( options.size < MIN_FS){
+            fprintf( stderr, 
+                     "ERROR: Invalid size, minimum is %d MBytes\n",
+                     MIN_FS / _1M);
             return( -1);
         }
     }
 
-   if( options->flags & OPT_PERCENTAGE){
-        options->percentage = validate_num( options->str_percentage);
-        if( options->percentage < 2 || options->percentage > 90 ){
+   if( options.flags & OPT_PERCENTAGE){
+        options.percentage = validate_num( options.str_percentage);
+        if( options.percentage < 2 || options.percentage > 90 ){
             fprintf( stderr, "ERROR: Percentage not valid. Valid range is ");
             fprintf( stderr, "[2-90]\n");
             display_help();
             return( -1);
         }
     }else{
-        options->percentage = MKFS_DEFAULT_PERCENTAGE;
+        options.percentage = MKFS_DEFAULT_PERCENTAGE;
     }
 
 
 
-    if( options->flags & OPT_NUM_SINODES){
-        options->sinodes_num = validate_num( options->str_sinodes_num);
-        if( options->sinodes_num == 0){
+    if( options.flags & OPT_NUM_SINODES){
+        options.sinodes_num = validate_num( options.str_sinodes_num);
+        if( options.sinodes_num == 0){
             fprintf( stderr, "ERROR: SInodes num not valid\n");
             display_help();
             return( -1);
         }
     }
-    if( options->flags & OPT_NUM_SLOTS){
-        options->slots_num = validate_num( options->str_slots_num);
-        if( options->slots_num == 0){
+    if( options.flags & OPT_NUM_SLOTS){
+        options.slots_num = validate_num( options.str_slots_num);
+        if( options.slots_num == 0){
             fprintf( stderr, "ERROR: Slots num not valid\n");
             display_help();
             return( -1);
@@ -952,21 +1071,22 @@ int parse_opts( int argc, char **argv, options_t *options){
     }
 
 
-    TRACE("need_file=%d\n", need_file);
     if( need_file == 1){
-        rc = stat( options->filename, &st);
+        rc = stat( options.filename, &st);
         if( rc != 0){
-            if( options->flags & OPT_DUMP){
+            if( options.flags & OPT_DUMP){
                 fprintf( stderr, "ERROR: File does not exist.\n");
                 display_help();
                 return( -1);
             }
 
-            if( (options->flags & OPT_CALCULATE) == 0 ){
-                printf("File '%s' does not exist, will create. \n", 
-                        options->filename);
-                options->flags |= MKFS_CREATE_FILE;
-                options->flags |= MKFS_IS_REGULAR_FILE;
+            if( (options.flags & OPT_CALCULATE) == 0 ){
+                if( options.flags & OPT_VERBOSE){
+                    printf( "File '%s' does not exist, will create. \n", 
+                            options.filename);
+                }
+                options.flags |= MKFS_CREATE_FILE;
+                options.flags |= MKFS_IS_REGULAR_FILE;
             }
         }else{
             if( (! S_ISREG(st.st_mode)) && (! S_ISBLK(st.st_mode))){
@@ -977,83 +1097,63 @@ int parse_opts( int argc, char **argv, options_t *options){
 
             if( S_ISREG(st.st_mode)){
                 if( st.st_size > 0){
-                    options->size = (uint64_t) st.st_size;
+                    options.size = (uint64_t) st.st_size;
                 }
-                options->flags |= MKFS_IS_REGULAR_FILE;
+                options.flags |= MKFS_IS_REGULAR_FILE;
             }
 
             if( S_ISBLK(st.st_mode)){
-                options->size = (uint64_t) get_bd_device_size( options->filename);
-                options->flags |= MKFS_IS_BLOCKDEVICE;
+                options.size = (uint64_t) get_bd_device_size( options.filename);
+                options.flags |= MKFS_IS_BLOCKDEVICE;
             }
    
-            options->flags |= OPT_SIZE;
+            options.flags |= OPT_SIZE;
         }
-        printf(" -File system size: %lu Bytes (%lu MBytes, %.2f GBytes)\n",
-            options->size, 
-            options->size/_1M, 
-            (double)options->size/(double)_1G);
-
     }
 
 
-    if( options->flags & (OPT_VERBOSE|OPT_CALCULATE)){
-        printf("Filename=<%s>\n", options->filename);
-        printf("SSize=<%s>\n", options->str_size);
-        printf("SSInodesNum=<%s>\n", options->str_sinodes_num);
-        printf("SSlotsNum=<%s>\n", options->str_slots_num);
-        printf("SPercentage=<%s>\n", options->str_percentage);
-        printf("Size=<%lu>\n", options->size);
-        printf("SInodesNum=<%lu>\n", options->sinodes_num);
-        printf("SlotsNum=<%lu>\n", options->slots_num);
-        printf("Percentage=<%d>\n", options->percentage);
-        printf("Flags=<0x%x>\n", options->flags);
+    if( options.flags & (OPT_VERBOSE|OPT_CALCULATE)){
+        printf("Passed arguments: \n");
+        printf("  Filename=<%s>\n", options.filename);
+        printf("  SSize=<%s>\n", options.str_size);
+        printf("  SSInodesNum=<%s>\n", options.str_sinodes_num);
+        printf("  SSlotsNum=<%s>\n", options.str_slots_num);
+        printf("  SPercentage=<%s>\n", options.str_percentage);
+        printf("  Size=<%lu>\n", options.size);
+        printf("  SInodesNum=<%lu>\n", options.sinodes_num);
+        printf("  SlotsNum=<%lu>\n", options.slots_num);
+        printf("  Percentage=<%d>\n", options.percentage);
+        printf("  Flags=<0x%x>\n", options.flags);
     }
 
     return(0);
 }
 
-int compute_blocks( options_t *options, blocks_calc_t *bc){
-    int rc;
-
-    memset( ( void *) bc, 0, sizeof( blocks_calc_t));
-    bc->in_file_size_in_blocks = options->size / KFS_BLOCKSIZE;
-    bc->in_file_size_in_mbytes = options->size / _1M;
- 
-    if( options->flags & (OPT_NUM_SINODES|OPT_NUM_SLOTS)){
-        
-        bc->in_sinodes_num = options->sinodes_num; 
-        bc->in_slots_num = options->slots_num;
-    }
-    
-
-    bc->in_percentage = options->percentage;
-    rc = blocks_calc( bc);
-    return( rc);
-}
-
 int main( int argc, char **argv){
     int rc;
-    options_t options;
-    blocks_calc_t blocks_results;
-
 
     /* parse options */
-    rc = parse_opts( argc, argv, &options);
+    rc = parse_opts( argc, argv);
+    if( rc < 0){
+        return( rc);
+    }
 
     /* compute blocks and values */
-    rc = compute_blocks( &options, &blocks_results);
+    rc = compute_blocks();
+    if( rc < 0){
+        return( rc);
+    }
+
 
     if( options.flags & (OPT_VERBOSE|OPT_CALCULATE) ){
-        blocks_calc_display( &blocks_results);
+        blocks_results_display();
     }
 
     if( options.flags & OPT_CALCULATE){
        exit( 0);
     }
 
-    TRACE("ok1\n");
-    rc = build_filesystem_in_file( &options, &blocks_results); 
+    rc = build_filesystem_in_file(); 
     if( rc != 0){
         fprintf( stderr, "ERROR: Failed to build a filesystem\n");
     }else{

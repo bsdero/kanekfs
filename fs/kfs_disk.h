@@ -121,23 +121,23 @@
  *
  * All the blocks/extents used for store tables data must have a table_header. 
  */
+
+
 typedef struct{
 
 /* those magics define what are we dealing with */
 #define KFS_EXTENT_MAGIC                           0xaca771
 
     
-/*#define KFS_SLOTS_ROOT_MAGIC                       0x0c01a7e*/
 #define KFS_SLOTS_BITMAP_MAGIC                     0x1a77e
-//#define KFS_SLOTS_TABLE_MAGIC                      0xdecaf
+#define KFS_SLOTS_TABLE_MAGIC                      0xdecaf
 #define KFS_SLOTS_DATA_MAGIC                       0xc0ffee
 
-//#define KFS_SINODE_ROOT_MAGIC                      0xc001beb
 #define KFS_SINODE_BITMAP_MAGIC                    0xbad50da
 #define KFS_SINODE_TABLE_MAGIC                     0x00cafe
-#define KFS_SINODE_DATA_MAGIC                      0xcafe01e;
+#define KFS_SINODE_DATA_MAGIC                      0x0c01a7e
 
-#define KFS_BLOCKMAP_MAGIC                         0x0c01a7e;
+#define KFS_BLOCKMAP_MAGIC                         0xc001beb
 
 
     uint32_t eh_magic; /* table type */
@@ -218,7 +218,7 @@ typedef struct{ /* entry for the slots index. This structure helps to locate
     uint32_t slot_id;     /* slot ID. Should be stored in sequence. */
     uint32_t slot_sino_owner;
     uint32_t slot_link_owner;
-    uint32_t slot_flags;  /* the same flags than in slots.h in slot_t*/
+    uint32_t slot_flags;  /* the same flags than in kfs_mem.h in slot_t*/
 
     kfs_extent_t slot_extent;  /* extent with this slot entries.*/
 }kfs_slot_t;

@@ -5,7 +5,7 @@ SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 TESTS=testdict testrand testhash testdh testgc testmap testsizes
 
-TOOLS=kfs_mkfs
+TOOLS=kfs_mkfs kfs_info
 
 
 all: tests tools
@@ -15,8 +15,13 @@ tests: objs $(TESTS)
 tools: objs $(TOOLS)
 
 
+kfs_info: kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o
+	$(CC) -o kfs_info kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o
+
 kfs_mkfs: kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o
 	$(CC) -o kfs_mkfs kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o
+
+
 
 testdict: testdict.o hash.o dict.o 
 	$(CC) -o testdict testdict.o hash.o dict.o 

@@ -24,6 +24,16 @@
 #define _1G                                        1073741824
 
 
+#ifndef min
+#define min(a,b)             \
+({                           \
+    __typeof__ (a) _a = (a); \
+    __typeof__ (b) _b = (b); \
+    _a < _b ? _a : _b;       \
+})
+#endif
+
+
 
 /* Thses are the on-disk structures. To support them, we need some headers 
  * for store information which can be numbered, like slots, inodes, edges, 

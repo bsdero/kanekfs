@@ -14,23 +14,10 @@
 #include "map.h"
 
 
-#define _1M                                        1048576
-#define _1G                                        1073741824
-
-#ifndef min
-#define min(a,b)             \
-({                           \
-    __typeof__ (a) _a = (a); \
-    __typeof__ (b) _b = (b); \
-    _a < _b ? _a : _b;       \
-})
-#endif
-
 #define OPT_SIZE                                   0x0001
 #define OPT_NUM_SLOTS                              0x0002
 #define OPT_NUM_SINODES                            0x0004
 #define OPT_CALCULATE                              0x0008
-#define OPT_DUMP                                   0x0010
 #define OPT_PERCENTAGE                             0x0020
 #define OPT_VERBOSE                                0x0040
 #define OPT_HELP                                   0x0080
@@ -98,7 +85,6 @@ int display_help(){
         "      -i sino_num       Number of Super Inodes",
         "      -n slot_num       Number of Metadata Slots", 
         "      -c                Calc number of items",
-        "      -d                Dump details about file system",
         "      -p percentage     super inodes and slots percentage", 
         "      -v                Verbose mode",
         "      -h                Help",
@@ -145,9 +131,6 @@ int display_help(){
         "       super inodes and slots. The default is about 12%. It needs",
         "       to know the disk size before, so it can be used with -s   ",
         "       and -c.",
-        "",
-        "      -If [-d] is specified, information about the filesystem is ",
-        "       shown", 
         "",
         "      -Options [-s, -i, -n, -c] can be used together.",
         "",       
@@ -308,26 +291,10 @@ int build_superblock( int fd){
     sb->sb_m_time = current_time; 
     sb->sb_a_time = current_time;
 
-
-    /* populate the slot index extent and its map extent */
-    sb->sb_slot_table.capacity = bc->out_slots_num;
-    sb->sb_slot_table.in_use = 1;
-    extent.ee_block_addr = 1; /* block address of the slot table= 1 */ 
-    extent.ee_block_size = bc->out_slots_table_in_blocks;
-    extent.ee_log_size = bc->out_slots_num;
-    extent.ee_log_addr = 0;
-    sb->sb_slot_table.table_extent = extent;
-
-    extent.ee_block_addr = slot_map_block;
-    extent.ee_block_size = bc->out_slots_bitmap_blocks_num;
-    extent.ee_log_size = bc->out_slots_bitmap_blocks_num;
-    extent.ee_log_addr = 0;
-    sb->sb_slot_table.bitmap_extent = extent;
-
     /* populate the sinode index extent and its map extent */
     sb->sb_si_table.capacity = bc->out_sinodes_num;
     sb->sb_si_table.in_use = 1;
-    extent.ee_block_addr = bc->out_slots_table_in_blocks + 2; 
+    extent.ee_block_addr = 1; 
     extent.ee_block_size = bc->out_sinodes_table_in_blocks;
     extent.ee_log_size = bc->out_sinodes_num;
     extent.ee_log_addr = 0;
@@ -338,6 +305,23 @@ int build_superblock( int fd){
     extent.ee_log_size = bc->out_sinodes_bitmap_blocks_num;
     extent.ee_log_addr = 0;
     sb->sb_si_table.bitmap_extent = extent;
+
+
+
+    /* populate the slot index extent and its map extent */
+    sb->sb_slot_table.capacity = bc->out_slots_num;
+    sb->sb_slot_table.in_use = 0;
+    extent.ee_block_addr = bc->out_sinodes_table_in_blocks + 1; 
+    extent.ee_block_size = bc->out_slots_table_in_blocks;
+    extent.ee_log_size = bc->out_slots_num;
+    extent.ee_log_addr = 0;
+    sb->sb_slot_table.table_extent = extent;
+
+    extent.ee_block_addr = slot_map_block;
+    extent.ee_block_size = bc->out_slots_bitmap_blocks_num;
+    extent.ee_log_size = bc->out_slots_bitmap_blocks_num;
+    extent.ee_log_addr = 0;
+    sb->sb_slot_table.bitmap_extent = extent;
 
     /* populate the map extent */
     extent.ee_block_addr = fs_map_block;
@@ -351,7 +335,7 @@ int build_superblock( int fd){
     p = ( char *) sb;
     p += 512; 
     strcpy( p, secret);
-    PRINTV("    -Write Superblock in block #0")
+    PRINTV("    -Write Superblock in block: [0]")
     rc = page_write( fd, (void *) sb, 0);
     if( rc != 0){
         TRACE_ERR( "Could not write\n");
@@ -395,11 +379,11 @@ int build_sinodes( int fd){
     kfs_extent_header_t *ex_header = NULL;
     kfs_sinode_t *sino;
     int block_num; 
-    uint64_t i, n, sinodes_per_block, sino_num;
+    uint64_t i, sino_num;
     char *p, *slp;
     unsigned char *bitmap;
     blocks_calc_t *bc = &blocks_calc;
-    uint64_t sinode_map_block, slot_map_block, fs_map_block;
+    uint64_t sinode_map_block, slot_map_block, fs_map_block, liminf, limsup;
 
 
     PRINTV("-Building Super inodes table");
@@ -417,13 +401,10 @@ int build_sinodes( int fd){
 
     current_time = time( NULL);
 
-    n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
-    sinodes_per_block = n / sizeof( kfs_sinode_t);
-
     /* fill in the first block of the sinodes table */
     ex_header->eh_magic = KFS_SINODE_TABLE_MAGIC;
     ex_header->eh_entries_in_use = 1;
-    ex_header->eh_entries_capacity = sinodes_per_block;
+    ex_header->eh_entries_capacity = bc->out_sinodes_num;
     ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
     i = sizeof( kfs_extent_header_t);
 
@@ -434,7 +415,7 @@ int build_sinodes( int fd){
     sino->si_c_time = current_time;
     sino->si_m_time = current_time;
     sino->si_slot_id = 0xfffffffe;
-    sino->si_id = n++;
+    sino->si_id = sino_num++;
 
     /* fill in the other inodes */
     i = sizeof( kfs_extent_header_t) + sizeof( kfs_sinode_t);
@@ -445,11 +426,13 @@ int build_sinodes( int fd){
     }
 
     /* write the first block of the extent with the sinodes table */
-    block_num = 1;
+    liminf = block_num = 1;
     page_write( fd, slp, block_num++);
 
-    /* write out the remaining blocks of the table */
-    while( block_num < (bc->out_sinodes_table_in_blocks+1)){
+    /* write out the remaining blocks of the table. 
+     * -1 because we already wrote 1 block 
+     */
+    while( block_num <= bc->out_sinodes_table_in_blocks - 1){
         memset( (void *) slp, 0, KFS_BLOCKSIZE);
  
         i = 0;
@@ -464,15 +447,16 @@ int build_sinodes( int fd){
         page_write( fd, p, block_num++);
     }
 
-    PRINTV("    -Writing SuperInodes table blocks: [%d-%d]",
-                1,
-                block_num - 1); 
+    limsup = block_num;
+    PRINTV("    -Writing SuperInodes table blocks: [%lu-%lu]",
+                liminf,
+                limsup); 
  
     free( p);
 
 
     /* now on to the super inodes map */
-    PRINTV("-Building super inodes map");
+    PRINTV("    -Building super inodes map");
 
     slp = p = pages_alloc( bc->out_sinodes_bitmap_blocks_num);
 
@@ -488,14 +472,15 @@ int build_sinodes( int fd){
     bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
 
     bm_set_bit( ( unsigned char *) bitmap, bc->out_sinodes_num, 0, 1);
+    liminf = sinode_map_block;
     for( i = 0; i < bc->out_sinodes_bitmap_blocks_num; i++){
         page_write( fd, slp, sinode_map_block + i);
         slp += KFS_BLOCKSIZE;
     }
-
+    limsup = sinode_map_block + i - 1;
     PRINTV("    -Writing SuperInodes blocks map: [%lu-%lu]", 
-                sinode_map_block, 
-                sinode_map_block + i - 1);
+                liminf, 
+                limsup);
     
     free( p);
 
@@ -528,7 +513,7 @@ int build_sinodes( int fd){
 int build_slots( int fd){
     kfs_extent_header_t *ex_header = NULL;
     kfs_slot_t *slot;
-    uint64_t block_num, i, n, slots_per_block, slot_num;
+    uint64_t block_num, i, slot_num;
     char *p, *slp;
     unsigned char *bitmap;
     blocks_calc_t *bc = &blocks_calc;
@@ -547,13 +532,10 @@ int build_slots( int fd){
     slp = p = pages_alloc( 1);
     ex_header = (kfs_extent_header_t *) p;
 
-    n = KFS_BLOCKSIZE - sizeof( kfs_extent_header_t);
-    slots_per_block = n / sizeof( kfs_slot_t);
-
     /* fill in the first block of the slots table */
     ex_header->eh_magic = KFS_SLOTS_TABLE_MAGIC;
     ex_header->eh_entries_in_use = 0;
-    ex_header->eh_entries_capacity = slots_per_block;
+    ex_header->eh_entries_capacity = bc->out_slots_num;
     ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
     i = sizeof( kfs_extent_header_t);
 
@@ -571,11 +553,10 @@ int build_slots( int fd){
     block_num = bc->out_sinodes_table_in_blocks + 1;
     liminf = block_num;
     page_write( fd, slp, block_num++);
-
     limsup = liminf + bc->out_slots_table_in_blocks;
 
     /* write out the remaining blocks of the table */
-    while( block_num < limsup){
+    while( block_num <= limsup){
         memset( (void *) slp, 0, KFS_BLOCKSIZE);
  
         i = 0;
@@ -593,10 +574,10 @@ int build_slots( int fd){
 
     PRINTV("    -Writing slots table blocks: [%lu-%lu]", 
                 liminf, 
-                limsup - 1);
+                limsup);
  
     /* now on to the super inodes map */
-    PRINTV("-Building slots map");
+    PRINTV("    -Building slots map");
 
     slp = p = pages_alloc( bc->out_slots_bitmap_blocks_num);
 
@@ -610,14 +591,15 @@ int build_slots( int fd){
     ex_header->eh_entries_capacity = bc->out_slots_num;
     ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
     bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
-
+    liminf = slot_map_block;
     for( i = 0; i < bc->out_slots_bitmap_blocks_num; i++){
         page_write( fd, slp, slot_map_block + i);
         slp += KFS_BLOCKSIZE;
     }
+    limsup = slot_map_block + i - 1;
     PRINTV("    -Writing Slots blocks map: [%lu-%lu]", 
-                slot_map_block, 
-                slot_map_block + i - 1);
+                liminf, 
+                limsup);
  
     free( p);
 
@@ -754,23 +736,22 @@ int blocks_results_display(){
     blocks_calc_t *bc = &blocks_calc;
 
     printf("IN:\n");
-    printf("   Blocksize=%d\n", KFS_BLOCKSIZE);
-    printf("   InodesNum=%lu\n", bc->in_sinodes_num);
-    printf("   SlotsNum=%lu\n", bc->in_slots_num);
-    printf("   FileSizeInMB=%lu\n", bc->in_file_size_in_mbytes);
-    printf("   FileSizeInBlocks=%lu\n", bc->in_file_size_in_blocks);
-    printf("   Percentage=%d\n", bc->in_percentage);
+    printf("    Blocksize=%d\n", KFS_BLOCKSIZE);
+    printf("    InodesNum=%lu\n", bc->in_sinodes_num);
+    printf("    SlotsNum=%lu\n", bc->in_slots_num);
+    printf("    FileSizeInMB=%lu\n", bc->in_file_size_in_mbytes);
+    printf("    FileSizeInBlocks=%lu\n", bc->in_file_size_in_blocks);
+    printf("    Percentage=%d\n", bc->in_percentage);
     printf("OUT:\n");
-    printf("   TotalBlocksRequired=%lu\n", bc->out_total_blocks_required);
-    printf("   TotalDiskRequiredInMB=%lu\n",  /* 128 blocks per Mbyte */
+    printf("    TotalBlocksRequired=%lu\n", bc->out_total_blocks_required);
+    printf("    TotalDiskRequiredInMB=%lu\n",  /* 128 blocks per Mbyte */
            bc->out_total_blocks_required / 128);
-    printf("   BitmapSizeInBlocks=%lu\n", bc->out_bitmap_size_in_blocks);
-
-    printf("   InodesNum=%lu\n", bc->out_sinodes_num);
-    printf("   SlotsNum=%lu\n", bc->out_slots_num);
-    printf("   SlotsTableInBlocks=%lu, SlotsMapInBlocks=%lu\n", 
+    printf("    BitmapSizeInBlocks=%lu\n", bc->out_bitmap_size_in_blocks);
+    printf("    InodesNum=%lu\n", bc->out_sinodes_num);
+    printf("    SlotsNum=%lu\n", bc->out_slots_num);
+    printf("    SlotsTableInBlocks=%lu, SlotsMapInBlocks=%lu\n", 
         bc->out_slots_table_in_blocks, bc->out_slots_bitmap_blocks_num);
-    printf("   SinodesTableInBlocks=%lu, SinodesMapInBlocks=%lu\n", 
+    printf("    SinodesTableInBlocks=%lu, SinodesMapInBlocks=%lu\n", 
         bc->out_sinodes_table_in_blocks, bc->out_sinodes_bitmap_blocks_num);
 
     return(0);
@@ -924,7 +905,7 @@ int parse_opts( int argc, char **argv){
     int need_file = 1;
 
     flags = 0;
-    char opc[] = "s:i:n:cdp:vh";
+    char opc[] = "s:i:n:cp:vh";
     memset( (void *) &options, 0, sizeof( options_t));
 
     if( argc == 0){
@@ -951,9 +932,6 @@ int parse_opts( int argc, char **argv){
             case 'p':
                 flags |= OPT_PERCENTAGE;
                 strcpy( options.str_percentage, optarg);
-                break;
-            case 'd':
-                flags |= OPT_DUMP;
                 break;
             case 'v':
                 flags |= OPT_VERBOSE;
@@ -998,9 +976,6 @@ int parse_opts( int argc, char **argv){
     if(  ( flags & OPT_HELP) || /* any option with -h */
          ( flags == OPT_VERBOSE) ||   /* -v alone */
 
-         /* -d and -v with any extra flags */
-         ( (flags & ( OPT_DUMP)) && ~( flags & (OPT_DUMP | OPT_VERBOSE))) || 
-                                                                                                              
          /* -p and -i, or -p and -n can not go together */
          ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SINODES)) == 
                     ( OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
@@ -1074,12 +1049,6 @@ int parse_opts( int argc, char **argv){
     if( need_file == 1){
         rc = stat( options.filename, &st);
         if( rc != 0){
-            if( options.flags & OPT_DUMP){
-                fprintf( stderr, "ERROR: File does not exist.\n");
-                display_help();
-                return( -1);
-            }
-
             if( (options.flags & OPT_CALCULATE) == 0 ){
                 if( options.flags & OPT_VERBOSE){
                     printf( "File '%s' does not exist, will create. \n", 
@@ -1114,16 +1083,16 @@ int parse_opts( int argc, char **argv){
 
     if( options.flags & (OPT_VERBOSE|OPT_CALCULATE)){
         printf("Passed arguments: \n");
-        printf("  Filename=<%s>\n", options.filename);
-        printf("  SSize=<%s>\n", options.str_size);
-        printf("  SSInodesNum=<%s>\n", options.str_sinodes_num);
-        printf("  SSlotsNum=<%s>\n", options.str_slots_num);
-        printf("  SPercentage=<%s>\n", options.str_percentage);
-        printf("  Size=<%lu>\n", options.size);
-        printf("  SInodesNum=<%lu>\n", options.sinodes_num);
-        printf("  SlotsNum=<%lu>\n", options.slots_num);
-        printf("  Percentage=<%d>\n", options.percentage);
-        printf("  Flags=<0x%x>\n", options.flags);
+        printf("    Filename=<%s>\n", options.filename);
+        printf("    SSize=<%s>\n", options.str_size);
+        printf("    SSInodesNum=<%s>\n", options.str_sinodes_num);
+        printf("    SSlotsNum=<%s>\n", options.str_slots_num);
+        printf("    SPercentage=<%s>\n", options.str_percentage);
+        printf("    Size=<%lu>\n", options.size);
+        printf("    SInodesNum=<%lu>\n", options.sinodes_num);
+        printf("    SlotsNum=<%lu>\n", options.slots_num);
+        printf("    Percentage=<%d>\n", options.percentage);
+        printf("    Flags=<0x%x>\n", options.flags);
     }
 
     return(0);

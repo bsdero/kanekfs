@@ -396,7 +396,7 @@ int build_sinodes( int fd){
     sinode_map_block = slot_map_block - bc->out_sinodes_bitmap_blocks_num;
 
 
-    slp = p = pages_alloc( 1);
+    p = pages_alloc( 1);
     ex_header = (kfs_extent_header_t *) p;
 
     current_time = time( NULL);
@@ -410,7 +410,7 @@ int build_sinodes( int fd){
 
     /* fill in the first inode */
     sino_num = 0;
-    sino = ( kfs_sinode_t *) slp + sizeof( kfs_extent_header_t);
+    sino = ( kfs_sinode_t *) p + sizeof( kfs_extent_header_t);
     sino->si_a_time = current_time;
     sino->si_c_time = current_time;
     sino->si_m_time = current_time;
@@ -427,13 +427,13 @@ int build_sinodes( int fd){
 
     /* write the first block of the extent with the sinodes table */
     liminf = block_num = 1;
-    page_write( fd, slp, block_num++);
+    page_write( fd, p, block_num++);
 
     /* write out the remaining blocks of the table. 
      * -1 because we already wrote 1 block 
      */
-    while( block_num <= bc->out_sinodes_table_in_blocks - 1){
-        memset( (void *) slp, 0, KFS_BLOCKSIZE);
+    while( block_num <= bc->out_sinodes_table_in_blocks){
+        memset( (void *) p, 0, KFS_BLOCKSIZE);
  
         i = 0;
         sino = ( kfs_sinode_t *) p;
@@ -447,11 +447,11 @@ int build_sinodes( int fd){
         page_write( fd, p, block_num++);
     }
 
-    limsup = block_num;
-    PRINTV("    -Writing SuperInodes table blocks: [%lu-%lu]",
+    limsup = block_num - 1;
+    PRINTV("    -Written SuperInodes table blocks: [%lu-%lu]",
                 liminf,
                 limsup); 
- 
+    PRINTV("    -Written SuperInodes num: [%lu, %lx]", sino_num, sino_num); 
     free( p);
 
 
@@ -505,7 +505,7 @@ int build_sinodes( int fd){
                    bc->out_sinodes_bitmap_blocks_num,
                    1);
     ex_header->eh_entries_in_use += bc->out_sinodes_bitmap_blocks_num;
- 
+    TRACE("Set map %lu\n", sinode_map_block); 
     return(0);
 }
 
@@ -556,7 +556,7 @@ int build_slots( int fd){
     limsup = liminf + bc->out_slots_table_in_blocks;
 
     /* write out the remaining blocks of the table */
-    while( block_num <= limsup){
+    while( block_num < limsup){
         memset( (void *) slp, 0, KFS_BLOCKSIZE);
  
         i = 0;
@@ -571,6 +571,7 @@ int build_slots( int fd){
         page_write( fd, p, block_num++);
     }
     free( p);
+    limsup = block_num - 1;
 
     PRINTV("    -Writing slots table blocks: [%lu-%lu]", 
                 liminf, 
@@ -624,6 +625,7 @@ int build_slots( int fd){
                    bc->out_slots_bitmap_blocks_num,
                    1);
     ex_header->eh_entries_in_use += bc->out_slots_bitmap_blocks_num;
+    TRACE("Set map %lu\n", slot_map_block); 
  
     return(0);
 }
@@ -633,12 +635,24 @@ int write_map(int fd){
     char *p = pages[PG_MAP];
     uint64_t i, block_num, fs_map_block, liminf, limsup; 
     blocks_calc_t *bc = &blocks_calc;
-
+    kfs_extent_header_t *ex_header = (kfs_extent_header_t *) p;
+    unsigned char *bitmap = (unsigned char *) p + 
+                            sizeof( kfs_extent_header_t);
+ 
     PRINTV("-Writing block map");
 
     /* set maps addresses */
     fs_map_block = bc->in_file_size_in_blocks - bc->out_bitmap_size_in_blocks;
     block_num = bc->out_bitmap_size_in_blocks;
+
+    /* mark the bits corresponding to the kfs block map */
+    bm_set_extent( bitmap, 
+                   bc->in_file_size_in_blocks, 
+                   fs_map_block,
+                   block_num,
+                   1);
+    ex_header->eh_entries_in_use += block_num;
+ 
     liminf = fs_map_block;
     for( i = 0; i < block_num; i++){
         page_write( fd, p, fs_map_block++);
@@ -650,7 +664,9 @@ int write_map(int fd){
     PRINTV("    -Writing KFS block map: [%lu-%lu]", 
                  liminf, 
                  limsup);
-    
+
+
+
     fsync( fd);
     free( pages[PG_MAP]);
 

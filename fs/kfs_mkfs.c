@@ -12,7 +12,7 @@
 #include <ctype.h>
 #include "kfs.h"
 #include "map.h"
-
+#include "kfs_io.h"
 
 #define OPT_SIZE                                   0x0001
 #define OPT_NUM_SLOTS                              0x0002
@@ -213,24 +213,6 @@ int create_file( char *fname){
     }
     close(fd);
     return(0);
-}
-
-uint64_t get_bd_device_size( char *fname){
-#ifdef BLKGETSIZE64
-    uint64_t numbytes; 
-    int fd = open( fname, O_RDONLY);
-    if( fd < 0){
-        perror("ERROR: Could not open block device \n");
-        exit( -1);
-    }
-    ioctl( fd, BLKGETSIZE64, &numbytes);
-    close(fd);
-    return( numbytes);
-#else
-    TRACE("ERROR: Operation not supported\n");
-    exit( -1);
-    return( -1);
-#endif
 }
 
 
@@ -1086,7 +1068,7 @@ int parse_opts( int argc, char **argv){
             }
 
             if( S_ISBLK(st.st_mode)){
-                options.size = (uint64_t) get_bd_device_size( options.filename);
+                options.size = (uint64_t) get_bd_size( options.filename);
                 options.flags |= MKFS_IS_BLOCKDEVICE;
             }
    

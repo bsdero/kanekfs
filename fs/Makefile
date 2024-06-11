@@ -5,8 +5,7 @@ SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 TESTS=testdict testrand testhash testdh testgc testmap testsizes
 
-TOOLS=kfs_mkfs kfs_info
-
+TOOLS=kfs_mkfs kfs_info kfs_server
 
 all: tests tools
 
@@ -15,12 +14,15 @@ tests: objs $(TESTS)
 tools: objs $(TOOLS)
 
 
-kfs_info: kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o
-	$(CC) -o kfs_info kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o
+kfs_info: kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
+	$(CC) -o kfs_info kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
 
-kfs_mkfs: kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o
-	$(CC) -o kfs_mkfs kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o
+kfs_mkfs: kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
+	$(CC) -o kfs_mkfs kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
 
+kfs_server: kfs_server.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
+	$(CC) -o kfs_server kfs_server.o krand64.o dict.o hash.o dumphex.o gc.o \
+		     map.o kfs_io.o
 
 
 testdict: testdict.o hash.o dict.o 

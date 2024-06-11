@@ -505,7 +505,6 @@ int build_sinodes( int fd){
                    bc->out_sinodes_bitmap_blocks_num,
                    1);
     ex_header->eh_entries_in_use += bc->out_sinodes_bitmap_blocks_num;
-    TRACE("Set map %lu\n", sinode_map_block); 
     return(0);
 }
 
@@ -625,7 +624,6 @@ int build_slots( int fd){
                    bc->out_slots_bitmap_blocks_num,
                    1);
     ex_header->eh_entries_in_use += bc->out_slots_bitmap_blocks_num;
-    TRACE("Set map %lu\n", slot_map_block); 
  
     return(0);
 }

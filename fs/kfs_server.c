@@ -214,7 +214,7 @@ int main( int argc, char **argv){
 
     display_config( &config);
 
-    rc = kfs_open( &config );
+  //  rc = kfs_open( &config );
 
 
 

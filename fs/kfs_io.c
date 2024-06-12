@@ -58,9 +58,66 @@ uint64_t get_bd_size( char *fname){
 
 
 
+int create_file( char *fname){
+    int fd = creat( fname, 0644);
+    if( fd < 0){
+        perror( "ERROR: Could not create file \n");
+        return( -1);
+    }
+    close(fd);
+    return(0);
+}
 
 
-int kfs_verify( char filename){
+char *pages_alloc( int n){
+    char *page;
+
+    page = malloc( KFS_BLOCKSIZE * n);
+    if( page == NULL){
+        TRACE_SYSERR( "malloc error.\n");
+        return( NULL);
+    }
+
+    /* Fill the whole file with zeroes */
+    memset( page, 0, (KFS_BLOCKSIZE * n) );
+    return( page);
+}
+
+int block_read( int fd, char *page, uint64_t addr){
+    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
+    read( fd, page, KFS_BLOCKSIZE );
+    return(0);
+}
+
+
+int block_write( int fd, char *page, uint64_t addr){
+    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
+    write( fd, page, KFS_BLOCKSIZE);
+
+    return(0);
+}
+
+
+
+
+
+int extent_read( int fd, char *extent, uint64_t addr, int block_num){
+    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
+    read( fd, extent, KFS_BLOCKSIZE * block_num );
+    return(0);
+}
+
+
+int extent_write( int fd, char *extent, uint64_t addr, int block_num){
+    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
+    write( fd, extent, KFS_BLOCKSIZE * block_num );
+
+    return(0);
+}
+
+
+
+int kfs_verify( char *filename, int verbose){
     char buff[256];
     uint64_t size, addr;
     struct stat st;
@@ -90,8 +147,6 @@ int kfs_verify( char filename){
         size = (uint64_t) get_bd_size( filename);
     }
      
-    printf("size=%lu\n", size);
-    
 
     p = malloc( KFS_BLOCKSIZE);
     if( p == NULL){
@@ -105,10 +160,8 @@ int kfs_verify( char filename){
         TRACE_ERR("Could not open block device.");
         return( -1);
     }
- 
-    lseek( fd, 0, SEEK_SET);
-    read( fd, p, KFS_BLOCKSIZE);
 
+    block_read( fd, p, 0);
 
     sb = (kfs_superblock_t *) p;
 
@@ -116,86 +169,88 @@ int kfs_verify( char filename){
         TRACE_ERR("Not a KFS file system. Abort.");
         return( -1);
     }
-
-    printf("KFS Magic: 0x%lx\n", sb->sb_magic);
-    printf("KFS Version: %u\n", sb->sb_version);
-    printf("KFS Flags: 0x%x\n", sb->sb_flags);
-    printf("KFS Blocksize: %lu\n", sb->sb_blocksize);
-    printf("KFS root super inode: %lu\n", sb->sb_root_super_inode);
-
     ctime = sb->sb_c_time;
     atime = sb->sb_a_time;
     mtime = sb->sb_m_time;
 
-    strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&ctime));
-    printf("KFS Ctime: %s\n", buff); 
 
-    strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&atime));    
-    printf("KFS Atime: %s\n", buff); 
+    if( verbose){
+        printf("File Size: %lu MBytes\n", size / _1M);
+        printf("KFS Magic: 0x%lx\n", sb->sb_magic);
+        printf("KFS Version: %u\n", sb->sb_version);
+        printf("KFS Flags: 0x%x\n", sb->sb_flags);
+        printf("KFS Blocksize: %lu\n", sb->sb_blocksize);
+        printf("KFS root super inode: %lu\n", sb->sb_root_super_inode);
 
-    strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&mtime));
-    printf("KFS Mtime: %s\n", buff); 
+        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&ctime));
+        printf("KFS Ctime: %s\n", buff); 
 
-    printf("SUPER INODES:\n");
-    printf("    NumberOfSuperInodes: %lu\n", sb->sb_si_table.capacity );
-    printf("    SuperInodesInUse: %lu\n", sb->sb_si_table.in_use ); 
-    printf("    SuperInodesTableAddress: %lu\n",  
-                sb->sb_si_table.table_extent.ee_block_addr );
-    printf("    SuperInodesTableBlocksNum: %u\n",  
-                sb->sb_si_table.table_extent.ee_block_size );
-    printf("    SuperInodesMapAddress: %lu\n",  
-                sb->sb_si_table.bitmap_extent.ee_block_addr );
-    printf("    SuperInodesMapBlocksNum: %u\n",  
-                sb->sb_si_table.bitmap_extent.ee_block_size );
+        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&atime));    
+        printf("KFS Atime: %s\n", buff); 
 
-    printf("SLOTS:\n");
-    printf("    NumberOfSlots: %lu\n", sb->sb_slot_table.capacity );
-    printf("    SlotsInUse: %lu\n", sb->sb_slot_table.in_use ); 
-    printf("    SlotsTableAddress: %lu\n",  
-                sb->sb_slot_table.table_extent.ee_block_addr );
-    printf("    SlotsTableBlocksNum: %u\n",  
-                sb->sb_slot_table.table_extent.ee_block_size );
-    printf("    SlotsMapAddress: %lu\n",  
-                sb->sb_slot_table.bitmap_extent.ee_block_addr );
-    printf("    SlotsMapBlocksNum: %u\n",  
-                sb->sb_slot_table.bitmap_extent.ee_block_size );
+        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&mtime));
+        printf("KFS Mtime: %s\n", buff); 
+
+        printf("SUPER INODES:\n");
+        printf("    NumberOfSuperInodes: %lu\n", sb->sb_si_table.capacity );
+        printf("    SuperInodesInUse: %lu\n", sb->sb_si_table.in_use ); 
+        printf("    SuperInodesTableAddress: %lu\n",  
+                    sb->sb_si_table.table_extent.ee_block_addr );
+        printf("    SuperInodesTableBlocksNum: %u\n",  
+                    sb->sb_si_table.table_extent.ee_block_size );
+        printf("    SuperInodesMapAddress: %lu\n",  
+                    sb->sb_si_table.bitmap_extent.ee_block_addr );
+        printf("    SuperInodesMapBlocksNum: %u\n",  
+                    sb->sb_si_table.bitmap_extent.ee_block_size );
+
+        printf("SLOTS:\n");
+        printf("    NumberOfSlots: %lu\n", sb->sb_slot_table.capacity );
+        printf("    SlotsInUse: %lu\n", sb->sb_slot_table.in_use ); 
+        printf("    SlotsTableAddress: %lu\n",  
+                    sb->sb_slot_table.table_extent.ee_block_addr );
+        printf("    SlotsTableBlocksNum: %u\n",  
+                    sb->sb_slot_table.table_extent.ee_block_size );
+        printf("    SlotsMapAddress: %lu\n",  
+                    sb->sb_slot_table.bitmap_extent.ee_block_addr );
+        printf("    SlotsMapBlocksNum: %u\n",  
+                    sb->sb_slot_table.bitmap_extent.ee_block_size );
 
  
 
-    printf("KFS Bitmap:\n");
-    printf("    KFSBlockMapAddress: %lu\n",  
-                sb->sb_blockmap.bitmap_extent.ee_block_addr );
-    printf("    KFSBlockMapBlocksNum: %u\n",  
-                sb->sb_blockmap.bitmap_extent.ee_block_size );
-    
-    printf("KFS BlocksRange:\n");
-    printf("    SuperBlock: [0]\n");
+        printf("KFS Bitmap:\n");
+        printf("    KFSBlockMapAddress: %lu\n",  
+                    sb->sb_blockmap.bitmap_extent.ee_block_addr );
+        printf("    KFSBlockMapBlocksNum: %u\n",  
+                    sb->sb_blockmap.bitmap_extent.ee_block_size );
+        
+        printf("KFS BlocksRange:\n");
+        printf("    SuperBlock: [0]\n");
 
-    e = &sb->sb_si_table.table_extent;
-    printf("    SuperInodesTable: [%lu-%lu]\n",
-           e->ee_block_addr,
-           e->ee_block_addr + e->ee_block_size - 1);
+        e = &sb->sb_si_table.table_extent;
+        printf("    SuperInodesTable: [%lu-%lu]\n",
+               e->ee_block_addr,
+               e->ee_block_addr + e->ee_block_size - 1);
 
-    e = &sb->sb_slot_table.table_extent;
-    printf("    SlotsTable: [%lu-%lu]\n",
-           e->ee_block_addr,
-           e->ee_block_addr + e->ee_block_size - 1);
-           
-    e = &sb->sb_si_table.bitmap_extent;
-    printf("    SuperInodesMap: [%lu-%lu]\n",
-           e->ee_block_addr,
-           e->ee_block_addr + e->ee_block_size - 1);
+        e = &sb->sb_slot_table.table_extent;
+        printf("    SlotsTable: [%lu-%lu]\n",
+               e->ee_block_addr,
+               e->ee_block_addr + e->ee_block_size - 1);
+               
+        e = &sb->sb_si_table.bitmap_extent;
+        printf("    SuperInodesMap: [%lu-%lu]\n",
+               e->ee_block_addr,
+               e->ee_block_addr + e->ee_block_size - 1);
 
-    e = &sb->sb_slot_table.bitmap_extent;
-    printf("    SlotsMap: [%lu-%lu]\n",
-           e->ee_block_addr,
-           e->ee_block_addr + e->ee_block_size - 1);
+        e = &sb->sb_slot_table.bitmap_extent;
+        printf("    SlotsMap: [%lu-%lu]\n",
+               e->ee_block_addr,
+               e->ee_block_addr + e->ee_block_size - 1);
 
-    e = &sb->sb_blockmap.bitmap_extent;
-    printf("    KFSBlockMap: [%lu-%lu]\n",
-           e->ee_block_addr,
-           e->ee_block_addr + e->ee_block_size - 1);
-
+        e = &sb->sb_blockmap.bitmap_extent;
+        printf("    KFSBlockMap: [%lu-%lu]\n",
+               e->ee_block_addr,
+               e->ee_block_addr + e->ee_block_size - 1);
+    }
 
 
 
@@ -205,31 +260,37 @@ int kfs_verify( char filename){
         return( -1);
     }
 
-    printf("\nChecking KFS Tables extents\n");
     addr = sb->sb_si_table.table_extent.ee_block_addr;
-    printf("-Reading Super Inodes Table Extent in: %lu\n", addr); 
-    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
-    read( fd, pex, KFS_BLOCKSIZE);
+    if( verbose){
+        printf("\nChecking KFS Tables extents\n");
+        printf("-Reading Super Inodes Table Extent in: %lu\n", addr); 
+    } 
+   
+
+    block_read( fd, pex, addr);
     eh = (kfs_extent_header_t *) pex;
 
-    
     if( eh->eh_magic != KFS_SINODE_TABLE_MAGIC){
         TRACE_ERR("KFS super inode table not detected. Abort.");
         return( -1);
     }
-    
-    printf("-SuperInodesTable extent\n");
-    printf("    -Magic : 0x%x\n", eh->eh_magic);
-    printf("    -SuperInodesCapacity: %d\n", eh->eh_entries_capacity );
-    printf("    -SuperInodesInUse: %d\n", eh->eh_entries_in_use );
-    printf("    -Flags: 0x%x\n", eh->eh_flags);
-
+ 
+    if( verbose){
+        printf("-SuperInodesTable extent\n");
+        printf("    -Magic : 0x%x\n", eh->eh_magic);
+        printf("    -SuperInodesCapacity: %d\n", eh->eh_entries_capacity );
+        printf("    -SuperInodesInUse: %d\n", eh->eh_entries_in_use );
+        printf("    -Flags: 0x%x\n", eh->eh_flags);
+    }
     addr = sb->sb_si_table.table_extent.ee_block_addr + 
            sb->sb_si_table.table_extent.ee_block_size - 1;
 
-    printf("    -Verifying last block of super inode extent in: %lu\n", addr); 
-    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
-    read( fd, pex, KFS_BLOCKSIZE);
+    if( verbose){
+        printf("    -Verifying last block of super inode extent in: %lu\n", 
+                addr);
+    }
+
+    block_read( fd, pex, addr);
 
     si = ( kfs_sinode_t *) pex;
     i = 0;
@@ -237,21 +298,24 @@ int kfs_verify( char filename){
        if( i >= KFS_BLOCKSIZE){
             TRACE_ERR("Unexpected, the super inode ID is beyond the page.");
             TRACE_ERR("last inode: [%lu-0x%lx]", si->si_id, si->si_id);
-            exit(-1);
+            return(-1);
         }
         si++;
         i += sizeof( kfs_sinode_t);
     }
-    printf("    -All seems to be fine, last inode: [%lu-0x%lx]\n", 
-                si->si_id, si->si_id);
 
+    if( verbose){
+        printf("    -All seems to be fine, last inode: [%lu-0x%lx]\n", 
+                    si->si_id, si->si_id);
+    }
 
 
 
     addr = sb->sb_slot_table.table_extent.ee_block_addr;
-    printf("-Reading Slot Table Extent in: %lu\n", addr); 
-    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
-    read( fd, pex, KFS_BLOCKSIZE);
+    if( verbose){
+        printf("-Reading Slot Table Extent in: %lu\n", addr); 
+    }
+    block_read( fd, pex, addr);
     eh = (kfs_extent_header_t *) pex;
 
     
@@ -260,18 +324,20 @@ int kfs_verify( char filename){
         return( -1);
     }
     
-    printf("-SlotsTable extent\n");
-    printf("    -Magic : 0x%x\n", eh->eh_magic);
-    printf("    -SlotsCapacity: %d\n", eh->eh_entries_capacity );
-    printf("    -SlotsInUse: %d\n", eh->eh_entries_in_use );
-    printf("    -Flags: 0x%x\n", eh->eh_flags);
-
+    if( verbose){
+        printf("-SlotsTable extent\n");
+        printf("    -Magic : 0x%x\n", eh->eh_magic);
+        printf("    -SlotsCapacity: %d\n", eh->eh_entries_capacity );
+        printf("    -SlotsInUse: %d\n", eh->eh_entries_in_use );
+        printf("    -Flags: 0x%x\n", eh->eh_flags);
+    }
     addr = sb->sb_slot_table.table_extent.ee_block_addr + 
            sb->sb_slot_table.table_extent.ee_block_size - 1;
 
-    printf("     Verifying last block of slot extent in: %lu\n", addr); 
-    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
-    read( fd, pex, KFS_BLOCKSIZE);
+    if( verbose){
+        printf("     Verifying last block of slot extent in: %lu\n", addr); 
+    }
+    block_read( fd, pex, addr);
 
     slot = ( kfs_slot_t *) pex;
     i = 0;
@@ -280,22 +346,28 @@ int kfs_verify( char filename){
             TRACE_ERR("Unexpected, the slot ID is beyond the page.");
             TRACE_ERR("last inode: [%u-0x%x]", 
                     slot->slot_id, slot->slot_id);
-            exit(-1);
+            return(-1);
         }
         slot++;
         i += sizeof( kfs_slot_t);
     }
    
-    printf("    -All seems to be fine, last slot: [%u-0x%x]\n", 
-                 slot->slot_id, slot->slot_id);
+    if( verbose){
+        printf("    -All seems to be fine, last slot: [%u-0x%x]\n", 
+                     slot->slot_id, slot->slot_id);
+    }
 
 
-    printf("\nChecking Map extents\n");
-    
+    if( verbose){
+        printf("\nChecking Map extents\n");
+    }
+
     addr = sb->sb_si_table.bitmap_extent.ee_block_addr;
-    printf("-Reading Super Inode Table Map Extent in: %lu\n", addr); 
-    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
-    read( fd, pex, KFS_BLOCKSIZE);
+    if( verbose){
+        printf("-Reading Super Inode Table Map Extent in: %lu\n", addr); 
+    }
+
+    block_read( fd, pex, addr);
     eh = (kfs_extent_header_t *) pex;
   
     if( eh->eh_magic != KFS_SINODE_BITMAP_MAGIC){
@@ -303,17 +375,21 @@ int kfs_verify( char filename){
         return( -1);
     }
     
-    printf("-SuperInodesTable Bitmap extent\n");
-    printf("    -Magic : 0x%x\n", eh->eh_magic);
-    printf("    -SuperInodesCapacity: %d\n", eh->eh_entries_capacity );
-    printf("    -SuperInodesInUse: %d\n", eh->eh_entries_in_use );
-    printf("    -Flags: 0x%x\n", eh->eh_flags);
 
+    if( verbose){
+        printf("-SuperInodesTable Bitmap extent\n");
+        printf("    -Magic : 0x%x\n", eh->eh_magic);
+        printf("    -SuperInodesCapacity: %d\n", eh->eh_entries_capacity );
+        printf("    -SuperInodesInUse: %d\n", eh->eh_entries_in_use );
+        printf("    -Flags: 0x%x\n", eh->eh_flags);
+    }
 
     addr = sb->sb_slot_table.bitmap_extent.ee_block_addr;
-    printf("-Reading Slot Table Map Extent in: %lu\n", addr); 
-    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
-    read( fd, pex, KFS_BLOCKSIZE);
+
+    if( verbose){ 
+        printf("-Reading Slot Table Map Extent in: %lu\n", addr); 
+    }
+    block_read( fd, pex, addr);
     eh = (kfs_extent_header_t *) pex;
   
     if( eh->eh_magic != KFS_SLOTS_BITMAP_MAGIC){
@@ -321,16 +397,20 @@ int kfs_verify( char filename){
         return( -1);
     }
     
-    printf("-SlotsTable Bitmap extent\n");
-    printf("    -Magic : 0x%x\n", eh->eh_magic);
-    printf("    -SlotsCapacity: %d\n", eh->eh_entries_capacity );
-    printf("    -SlotsInUse: %d\n", eh->eh_entries_in_use );
-    printf("    -Flags: 0x%x\n", eh->eh_flags);
 
+    if( verbose){
+        printf("-SlotsTable Bitmap extent\n");
+        printf("    -Magic : 0x%x\n", eh->eh_magic);
+        printf("    -SlotsCapacity: %d\n", eh->eh_entries_capacity );
+        printf("    -SlotsInUse: %d\n", eh->eh_entries_in_use );
+        printf("    -Flags: 0x%x\n", eh->eh_flags);
+    }
     addr = sb->sb_blockmap.bitmap_extent.ee_block_addr;
-    printf("-Reading KFS BlockMap Extent in: %lu\n", addr); 
-    lseek( fd, addr * KFS_BLOCKSIZE, SEEK_SET);
-    read( fd, pex, KFS_BLOCKSIZE);
+
+    if( verbose){
+        printf("-Reading KFS BlockMap Extent in: %lu\n", addr); 
+    }
+    block_read( fd, pex, addr);
     eh = (kfs_extent_header_t *) pex;
   
     if( eh->eh_magic != KFS_BLOCKMAP_MAGIC){
@@ -338,12 +418,13 @@ int kfs_verify( char filename){
         return( -1);
     }
     
-    printf("-SlotsTable Bitmap extent\n");
-    printf("    -Magic : 0x%x\n", eh->eh_magic);
-    printf("    -BlocksCapacity: %d\n", eh->eh_entries_capacity );
-    printf("    -BlocksInUse: %d\n", eh->eh_entries_in_use );
-    printf("    -Flags: 0x%x\n", eh->eh_flags);
-
+    if( verbose){
+        printf("-SlotsTable Bitmap extent\n");
+        printf("    -Magic : 0x%x\n", eh->eh_magic);
+        printf("    -BlocksCapacity: %d\n", eh->eh_entries_capacity );
+        printf("    -BlocksInUse: %d\n", eh->eh_entries_in_use );
+        printf("    -Flags: 0x%x\n", eh->eh_flags);
+    }
  
     close( fd);
     free(p);

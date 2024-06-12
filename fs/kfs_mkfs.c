@@ -204,41 +204,6 @@ uint64_t validate_num( char *str_size){
     return( uint);
 }
 
-
-int create_file( char *fname){
-    int fd = creat( fname, 0644);
-    if( fd < 0){
-        perror( "ERROR: Could not create file \n");
-        return( -1);
-    }
-    close(fd);
-    return(0);
-}
-
-
-char *pages_alloc( int n){
-    char *page;
-
-    page = malloc( KFS_BLOCKSIZE * n);
-    if( page == NULL){
-        TRACE_SYSERR( "malloc error.\n");
-        return( NULL);
-    }
-
-    /* Fill the whole file with zeroes */
-    memset( page, 0, (KFS_BLOCKSIZE * n) );
-    return( page);
-}
-
-
-int page_write( int fd, char *page, int block_num){
-    lseek( fd, block_num * KFS_BLOCKSIZE, SEEK_SET);
-    write( fd, page, KFS_BLOCKSIZE);
-
-    return(0);
-}
-
-
 int build_superblock( int fd){
     time_t current_time;
     kfs_extent_t extent;
@@ -318,7 +283,7 @@ int build_superblock( int fd){
     p += 512; 
     strcpy( p, secret);
     PRINTV("    -Write Superblock in block: [0]")
-    rc = page_write( fd, (void *) sb, 0);
+    rc = block_write( fd, (void *) sb, 0);
     if( rc != 0){
         TRACE_ERR( "Could not write\n");
         exit(-1);
@@ -409,7 +374,7 @@ int build_sinodes( int fd){
 
     /* write the first block of the extent with the sinodes table */
     liminf = block_num = 1;
-    page_write( fd, p, block_num++);
+    block_write( fd, p, block_num++);
 
     /* write out the remaining blocks of the table. 
      * -1 because we already wrote 1 block 
@@ -426,7 +391,7 @@ int build_sinodes( int fd){
             i += sizeof( kfs_sinode_t);
         }
 
-        page_write( fd, p, block_num++);
+        block_write( fd, p, block_num++);
     }
 
     limsup = block_num - 1;
@@ -456,7 +421,7 @@ int build_sinodes( int fd){
     bm_set_bit( ( unsigned char *) bitmap, bc->out_sinodes_num, 0, 1);
     liminf = sinode_map_block;
     for( i = 0; i < bc->out_sinodes_bitmap_blocks_num; i++){
-        page_write( fd, slp, sinode_map_block + i);
+        block_write( fd, slp, sinode_map_block + i);
         slp += KFS_BLOCKSIZE;
     }
     limsup = sinode_map_block + i - 1;
@@ -533,7 +498,7 @@ int build_slots( int fd){
     /* write the first block of the extent with the slots table */
     block_num = bc->out_sinodes_table_in_blocks + 1;
     liminf = block_num;
-    page_write( fd, slp, block_num++);
+    block_write( fd, slp, block_num++);
     limsup = liminf + bc->out_slots_table_in_blocks;
 
     /* write out the remaining blocks of the table */
@@ -549,7 +514,7 @@ int build_slots( int fd){
             i += sizeof( kfs_slot_t);
         }
 
-        page_write( fd, p, block_num++);
+        block_write( fd, p, block_num++);
     }
     free( p);
     limsup = block_num - 1;
@@ -575,7 +540,7 @@ int build_slots( int fd){
     bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
     liminf = slot_map_block;
     for( i = 0; i < bc->out_slots_bitmap_blocks_num; i++){
-        page_write( fd, slp, slot_map_block + i);
+        block_write( fd, slp, slot_map_block + i);
         slp += KFS_BLOCKSIZE;
     }
     limsup = slot_map_block + i - 1;
@@ -635,7 +600,7 @@ int write_map(int fd){
  
     liminf = fs_map_block;
     for( i = 0; i < block_num; i++){
-        page_write( fd, p, fs_map_block++);
+        block_write( fd, p, fs_map_block++);
         p += KFS_BLOCKSIZE;
     }
 

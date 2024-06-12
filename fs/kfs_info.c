@@ -30,7 +30,7 @@ int main( int argc, char **argv){
     
     filename = argv[1];
 
-    rc = kfs_verify( filename);
+    rc = kfs_verify( filename, 1);
     return( rc);
 }
 

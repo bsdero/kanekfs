@@ -29,19 +29,6 @@ typedef struct{
 }options_t;
 
 
-#define FILEDEV_LEN                                250
-typedef struct{
-    char kfs_file[FILEDEV_LEN];
-    int cache_page_len; 
-    int cache_ino_len; 
-    int cache_path_len;
-    int cache_graph_len; 
-    int threads_pool; 
-    int max_clients;
-}config_t; 
-
-
-
 int display_help(){
     char *help[]={
         "Usage: kfs_server [options] ",
@@ -71,86 +58,6 @@ int display_help(){
     return(0);
 }
 
-
-
-
-int read_config( char *filename, config_t *conf){
-    char *s, buff[256];
-    char delim[] = " =";
-#define KVLEN                                      80    
-    char key[KVLEN], value[KVLEN];
-
-
-    memset( (void *) conf, 0, sizeof( config_t));
-    FILE *fp = fopen( filename, "r");
-    if (fp == NULL){
-        TRACE_ERRNO("Could not open %s", filename);
-        display_help();
-        exit( -1);
-    }
-
-    /* Read next line */
-    while ((s = fgets(buff, sizeof( buff), fp)) != NULL){
-        /* Skip blank lines and comments */
-        if ( buff[0] == '\n'){
-            continue;
-        }
-
-        trim( buff);
-        if ( buff[0] == '#'){
-            continue;
-        }
-
-        /* Parse name/value pair from line */
-        s = strtok(buff, delim);
-        if ( s == NULL){
-            continue;
-        }
-        strncpy( key, s, KVLEN);
-
-        s = strtok( NULL, delim);
-        if ( s == NULL){
-            continue;
-        }
-
-        strncpy (value, s, KVLEN);
-
-        /* Copy into correct entry in parameters struct */
-        if ( strcmp( key, "kfs_file")==0){
-            strncpy( conf->kfs_file, value, KVLEN);
-        }else if ( strcmp( key, "cache_page_len")==0){
-            conf->cache_page_len = atoi( value);
-        }else if ( strcmp( key, "cache_ino_len")==0){
-            conf->cache_ino_len = atoi( value);
-        }else if ( strcmp( key, "cache_path_len")==0){
-            conf->cache_path_len = atoi( value);
-        }else if ( strcmp( key, "cache_graph_len")==0){
-            conf->cache_graph_len = atoi( value);
-        }else if ( strcmp( key, "threads_pool")==0){
-            conf->threads_pool = atoi( value);
-        }else if ( strcmp( key, "max_clients")==0){
-            conf->max_clients = atoi( value);
-        }else{
-            printf("%s/%s: Unknown name/value pair!\n", key, value);
-            return( -1);
-        }
-    }
-    /* Close file */
-    fclose (fp);
-    return(0);
-}
-
-
-void display_config( config_t *conf){
-    printf("Conf: \n");
-    printf("    kfs_file=<%s>\n", conf->kfs_file);
-    printf("    cache_page_len=%d\n", conf->cache_page_len);
-    printf("    cache_ino_len=%d\n", conf->cache_ino_len);   
-    printf("    cache_path_len=%d\n", conf->cache_path_len);
-    printf("    max_clients=%d\n", conf->max_clients);
-    printf("    cache_graph_len=%d\n", conf->cache_graph_len);
-    printf("    threads_pool=%d\n", conf->threads_pool);
-}
 
 int parse_opts( int argc, char **argv, options_t *options){
     char opc[] = "c:nvh";
@@ -207,17 +114,17 @@ int parse_opts( int argc, char **argv, options_t *options){
 int main( int argc, char **argv){
     int rc;
     options_t options;
-    config_t config;
+    kfs_config_t config;
 
     rc = parse_opts( argc, argv, &options);
-    rc = read_config( options.conf_file, &config);
+    rc = kfs_config_read( options.conf_file, &config);
 
-    display_config( &config);
+    kfs_config_display( &config);
 
-  //  rc = kfs_open( &config );
+    rc = kfs_open( &config );
 
 
 
-    return(0);
+    return( rc);
 }
 

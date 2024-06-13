@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include "kfs.h"
 #include "map.h"
+#include "kfs_io.h"
 
 
 
@@ -43,15 +44,14 @@ uint64_t get_bd_size( char *fname){
     uint64_t numbytes; 
     int fd = open( fname, O_RDONLY);
     if( fd < 0){
-        perror("ERROR: Could not open block device \n");
-        exit( -1);
+        TRACE_ERR("Could not open block device \n");
+        return( -1);
     }
     ioctl( fd, BLKGETSIZE64, &numbytes);
     close(fd);
     return( numbytes);
 #else
-    TRACE("ERROR: Operation not supported\n");
-    exit( -1);
+    TRACE_ERR("Operation not supported\n");
     return( -1);
 #endif
 }
@@ -116,8 +116,85 @@ int extent_write( int fd, char *extent, uint64_t addr, int block_num){
 }
 
 
+int kfs_config_read( char *filename, kfs_config_t *conf){
+    char *s, buff[256];
+    char delim[] = " =";
+#define KVLEN                                      KFS_FILENAME_LEN   
+    char key[KVLEN], value[KVLEN];
 
-int kfs_verify( char *filename, int verbose){
+
+    memset( (void *) conf, 0, sizeof( kfs_config_t));
+    FILE *fp = fopen( filename, "r");
+    if (fp == NULL){
+        TRACE_ERRNO("Could not open %s", filename);
+        return( -1);
+    }
+
+    /* Read next line */
+    while ((s = fgets(buff, sizeof( buff), fp)) != NULL){
+        /* Skip blank lines and comments */
+        if ( buff[0] == '\n'){
+            continue;
+        }
+
+        trim( buff);
+        if ( buff[0] == '#'){
+            continue;
+        }
+
+        /* Parse name/value pair from line */
+        s = strtok(buff, delim);
+        if ( s == NULL){
+            continue;
+        }
+        strncpy( key, s, KVLEN);
+
+        s = strtok( NULL, delim);
+        if ( s == NULL){
+            continue;
+        }
+
+        strncpy (value, s, KVLEN);
+
+        /* Copy into correct entry in parameters struct */
+        if ( strcmp( key, "kfs_file")==0){
+            strncpy( conf->kfs_file, value, KVLEN);
+        }else if ( strcmp( key, "cache_page_len")==0){
+            conf->cache_page_len = atoi( value);
+        }else if ( strcmp( key, "cache_ino_len")==0){
+            conf->cache_ino_len = atoi( value);
+        }else if ( strcmp( key, "cache_path_len")==0){
+            conf->cache_path_len = atoi( value);
+        }else if ( strcmp( key, "cache_graph_len")==0){
+            conf->cache_graph_len = atoi( value);
+        }else if ( strcmp( key, "threads_pool")==0){
+            conf->threads_pool = atoi( value);
+        }else if ( strcmp( key, "max_clients")==0){
+            conf->max_clients = atoi( value);
+        }else{
+            printf("%s/%s: Unknown name/value pair!\n", key, value);
+            return( -1);
+        }
+    }
+    /* Close file */
+    fclose (fp);
+    return(0);
+}
+
+
+void kfs_config_display( kfs_config_t *conf){
+    printf("Conf: \n");
+    printf("    kfs_file=<%s>\n", conf->kfs_file);
+    printf("    cache_page_len=%d\n", conf->cache_page_len);
+    printf("    cache_ino_len=%d\n", conf->cache_ino_len);   
+    printf("    cache_path_len=%d\n", conf->cache_path_len);
+    printf("    max_clients=%d\n", conf->max_clients);
+    printf("    cache_graph_len=%d\n", conf->cache_graph_len);
+    printf("    threads_pool=%d\n", conf->threads_pool);
+}
+
+
+int kfs_verify( char *filename, int verbose, int extra_verification){
     char buff[256];
     uint64_t size, addr;
     struct stat st;
@@ -252,7 +329,12 @@ int kfs_verify( char *filename, int verbose){
                e->ee_block_addr + e->ee_block_size - 1);
     }
 
+    if( extra_verification == 0){
+        close( fd);
+        free(p);
 
+        return(0);
+    }
 
     pex = malloc( KFS_BLOCKSIZE);
     if( pex == NULL){
@@ -425,12 +507,24 @@ int kfs_verify( char *filename, int verbose){
         printf("    -BlocksInUse: %d\n", eh->eh_entries_in_use );
         printf("    -Flags: 0x%x\n", eh->eh_flags);
     }
- 
+    free( pex);
+
+
     close( fd);
     free(p);
-    free(pex);
     return(0);
 }
 
+
+int kfs_open( kfs_config_t *conf){
+    int rc; 
+
+
+    rc = kfs_verify( conf->kfs_file, 0, 0);
+
+
+
+    return(rc);
+}
 
 

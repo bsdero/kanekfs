@@ -316,8 +316,6 @@ int build_map( int fd){
     bm_set_bit( ( unsigned char *) bitmap, bc->in_file_size_in_blocks, 0, 1);
     ex_header->eh_entries_in_use = 1;
 
-
-
     return(rc);
 }
 

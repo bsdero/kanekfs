@@ -169,6 +169,8 @@ int kfs_config_read( char *filename, kfs_config_t *conf){
             conf->cache_graph_len = atoi( value);
         }else if ( strcmp( key, "threads_pool")==0){
             conf->threads_pool = atoi( value);
+        }else if ( strcmp( key, "root_super_inode")==0){
+            conf->root_super_inode = atoi( value);
         }else if ( strcmp( key, "max_clients")==0){
             conf->max_clients = atoi( value);
         }else{
@@ -191,6 +193,7 @@ void kfs_config_display( kfs_config_t *conf){
     printf("    max_clients=%d\n", conf->max_clients);
     printf("    cache_graph_len=%d\n", conf->cache_graph_len);
     printf("    threads_pool=%d\n", conf->threads_pool);
+    printf("    root_super_inode=%d\n", conf->root_super_inode);
 }
 
 
@@ -515,13 +518,48 @@ int kfs_verify( char *filename, int verbose, int extra_verification){
     return(0);
 }
 
+int kfs_load_superblock( int fd, sb_t *sb){
 
-int kfs_open( kfs_config_t *conf){
-    int rc; 
+    return(0);
+}
 
 
-    rc = kfs_verify( conf->kfs_file, 0, 0);
+int kfs_open( kfs_config_t *config, kfs_context_t *context){
+    int rc, fd; 
+    sb_t sb;
 
+
+    rc = kfs_verify( config->kfs_file, 0, 0);
+    if( rc < 0){
+        TRACE_ERR("Verification failed, abort");
+        return( rc);
+    }
+
+
+    fd = open( config->kfs_file, O_RDWR );
+    if( fd < 0){
+        TRACE_ERR( "ERROR: Could not open file '%s'\n", config->kfs_file);
+        return( -1);
+    }
+
+    rc = kfs_load_superblock( fd, &sb);
+    if( rc < 0){
+        TRACE_ERR("Could not load superblock, abort");
+        return( rc);
+    }
+
+    memset( (void *) context, 0, sizeof( kfs_context_t));
+    context->config = *config;
+    context->sb = sb;
+    context->fd = fd; 
+
+    return( 0);
+}
+
+
+
+int kfs_server_init( kfs_config_t *config, kfs_context_t *context){
+    int rc = 0;
 
 
     return(rc);

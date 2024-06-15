@@ -211,7 +211,7 @@ typedef struct{
     uint64_t flags;
 
     /* block dev */
-    int dev;
+    int bdev;
 }sb_t;
 
 

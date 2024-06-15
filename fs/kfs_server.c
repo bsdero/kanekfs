@@ -111,20 +111,34 @@ int parse_opts( int argc, char **argv, options_t *options){
     return(0);
 }
 
+
+
+
 int main( int argc, char **argv){
     int rc;
     options_t options;
     kfs_config_t config;
+    kfs_context_t context; 
 
     rc = parse_opts( argc, argv, &options);
+    if( rc < 0){
+        return( rc);
+    }
+
     rc = kfs_config_read( options.conf_file, &config);
+    if( rc < 0){
+        return( rc);
+    }
+
 
     kfs_config_display( &config);
 
-    rc = kfs_open( &config );
+    rc = kfs_server_init( &config, &context );
+    if( rc < 0){
+        return( rc);
+    }
 
-
-
+//    rc = kfs_server_run( &server);
     return( rc);
 }
 

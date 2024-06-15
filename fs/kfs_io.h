@@ -10,8 +10,14 @@ typedef struct{
     int cache_graph_len; 
     int threads_pool; 
     int max_clients;
+    int root_super_inode;
 }kfs_config_t; 
 
+typedef struct{
+    kfs_config_t config;
+    sb_t sb;
+    int fd; 
+}kfs_context_t; 
 
 
 char *trim (char *s);
@@ -31,6 +37,8 @@ void kfs_config_display( kfs_config_t *conf);
 
 int kfs_verify( char *filename, int verbose, int extra_verification);
 
-int kfs_open( kfs_config_t *conf);
+int kfs_open( kfs_config_t *config, kfs_context_t *context);
+int kfs_server_init( kfs_config_t *config, kfs_context_t *context);
+
 #endif
 

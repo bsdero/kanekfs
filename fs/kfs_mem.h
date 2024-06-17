@@ -50,7 +50,7 @@ typedef struct{
 
     /* we should add callbacks for advice the objects owner of this extent
      * when something happened: an eviction, a flush or whatever */
-}map_extent_t;
+}extent_t;
 
 /* slots and slot table definition */
 typedef struct{
@@ -67,7 +67,7 @@ typedef struct{
 #define SLOT_UPDATE              0x1000
     uint32_t slot_flags;
     dict_t slot_d;
-    map_extent_t extent;
+    extent_t extent;
 }slot_t;
 
 
@@ -126,7 +126,7 @@ typedef struct{
     uint64_t si_data_len; /* file size */
 
 
-    map_extent_t edges, data;
+    extent_t edges, data;
 
     uint32_t si_edges_num;  /* total num of edges */
     
@@ -170,26 +170,16 @@ typedef struct{
 
 
 typedef struct{
-    uint64_t st_capacity;
-    uint64_t st_in_use;
-    map_extent_t st_bitmap; 
-    map_extent_t st_table;
-    cache_t *st_cache;
-}slot_table_t;
+    uint64_t capacity;
+    uint64_t in_use;
+    extent_t bitmap_extent; 
+    extent_t table_extent;
+    cache_t *cache;
+}table_t;
 
-typedef struct{
-    uint64_t si_capacity;
-    uint64_t si_in_use;
-    map_extent_t si_bitmap; 
-    map_extent_t si_table;
-    cache_t *si_cache;
-}si_table_t;
-
-typedef struct{
-    uint64_t blocks_capacity;
-    uint64_t blocks_in_use;
-    map_extent_t block_map;
-}blockmap_t;
+typedef table_t slot_table_t;
+typedef table_t si_table_t;
+typedef table_t blockmap_t;
 
 typedef struct{
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
@@ -204,11 +194,11 @@ typedef struct{
     slot_table_t sb_slot_table;
 
     /* bit map capacity in blocks, taken and extents. Cache is not used. */
-    blockmap_t blockmap;
+    blockmap_t sb_blockmap;
 
     time_t sb_c_time, sb_m_time, sb_a_time; 
 
-    uint64_t flags;
+    uint64_t sb_flags;
 
     /* block dev */
     int bdev;

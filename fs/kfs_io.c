@@ -518,7 +518,89 @@ int kfs_verify( char *filename, int verbose, int extra_verification){
     return(0);
 }
 
-int kfs_load_superblock( int fd, sb_t *sb){
+
+void ex_2_kfsex( kfs_extent_t *kex, extent_t *ex){
+    kex->ee_block_addr = ex->ex_block_addr;
+    kex->ee_block_size = ex->ex_block_size;
+    kex->ee_log_size = ex->ex_log_size;
+    kex->ee_log_addr = ex->ex_log_addr;
+}
+
+void kfsex_2_ex( extent_t *ex, kfs_extent_t *kex){
+    ex->ex_block_addr = kex->ee_block_addr;
+    ex->ex_block_size = kex->ee_block_size;
+    ex->ex_log_size = kex->ee_log_size;
+    ex->ex_log_addr = kex->ee_log_addr;
+}
+
+
+int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
+    char *p; 
+    int rc; 
+    kfs_superblock_t *kfs_sb;
+    kfs_extent_t *kex;
+    extent_t *ex;
+    time_t now;
+     
+    p = pages_alloc( 1);
+
+    rc = block_read( fd, p, 0);
+    if( rc < 0){
+        return( rc);
+    }
+
+    kfs_sb = (kfs_superblock_t *) p;
+
+    if( kfs_sb->sb_magic != KFS_MAGIC){
+        TRACE_ERR("Not a KFS file system. Abort.");
+        return( -1);
+    }
+
+    memset( sb, 0, sizeof( sb_t));
+    now = time( NULL);
+
+    kfs_sb->sb_m_time = kfs_sb->sb_a_time = now; 
+
+    sb->sb_root_super_inode = rsi;
+    sb->sb_flags = kfs_sb->sb_flags;
+    sb->sb_c_time = kfs_sb->sb_c_time;
+    sb->sb_m_time = kfs_sb->sb_m_time;
+    sb->sb_a_time = kfs_sb->sb_a_time;
+    sb->bdev = fd;
+    
+    sb->sb_si_table.capacity = kfs_sb->sb_si_table.capacity;
+    sb->sb_si_table.in_use = kfs_sb->sb_si_table.in_use;
+    kex = &kfs_sb->sb_si_table.table_extent;
+    ex = &sb->sb_si_table.table_extent;
+    kfsex_2_ex( ex, kex);
+    kex = &kfs_sb->sb_si_table.bitmap_extent;
+    ex = &sb->sb_si_table.bitmap_extent;
+    kfsex_2_ex( ex, kex);
+
+    sb->sb_slot_table.capacity = kfs_sb->sb_slot_table.capacity;
+    sb->sb_slot_table.in_use = kfs_sb->sb_slot_table.in_use;
+    kex = &kfs_sb->sb_slot_table.table_extent;
+    ex = &sb->sb_slot_table.table_extent;
+    kfsex_2_ex( ex, kex);
+    kex = &kfs_sb->sb_slot_table.bitmap_extent;
+    ex = &sb->sb_slot_table.bitmap_extent;
+    kfsex_2_ex( ex, kex);
+
+
+    sb->sb_blockmap.capacity = kfs_sb->sb_blockmap.capacity;
+    sb->sb_blockmap.in_use = kfs_sb->sb_blockmap.in_use;
+    kex = &kfs_sb->sb_blockmap.table_extent;
+    ex = &sb->sb_blockmap.table_extent;
+    kfsex_2_ex( ex, kex);
+    kex = &kfs_sb->sb_blockmap.bitmap_extent;
+    ex = &sb->sb_blockmap.bitmap_extent;
+    kfsex_2_ex( ex, kex);
+
+
+    kfs_sb->sb_flags = KFS_IS_MOUNTED;
+
+    block_write( fd, p, 0);
+    free( p); 
 
     return(0);
 }
@@ -542,7 +624,7 @@ int kfs_open( kfs_config_t *config, kfs_context_t *context){
         return( -1);
     }
 
-    rc = kfs_load_superblock( fd, &sb);
+    rc = kfs_load_superblock( fd, &sb, config->root_super_inode);
     if( rc < 0){
         TRACE_ERR("Could not load superblock, abort");
         return( rc);
@@ -557,12 +639,5 @@ int kfs_open( kfs_config_t *config, kfs_context_t *context){
 }
 
 
-
-int kfs_server_init( kfs_config_t *config, kfs_context_t *context){
-    int rc = 0;
-
-
-    return(rc);
-}
 
 

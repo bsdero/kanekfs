@@ -112,6 +112,15 @@ int parse_opts( int argc, char **argv, options_t *options){
 }
 
 
+int kfs_server_init( kfs_config_t *config, kfs_context_t *context){
+    int rc = 0;
+
+    /* init caches here, thread pool, terminal detach, sockets */
+
+
+    return(rc);
+}
+
 
 
 int main( int argc, char **argv){

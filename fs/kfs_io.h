@@ -38,7 +38,6 @@ void kfs_config_display( kfs_config_t *conf);
 int kfs_verify( char *filename, int verbose, int extra_verification);
 
 int kfs_open( kfs_config_t *config, kfs_context_t *context);
-int kfs_server_init( kfs_config_t *config, kfs_context_t *context);
 
 #endif
 

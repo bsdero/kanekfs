@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <ctype.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include "kfs.h"
 #include "map.h"
 #include "kfs_io.h"
@@ -114,9 +116,18 @@ int parse_opts( int argc, char **argv, options_t *options){
 
 int kfs_server_init( kfs_config_t *config, kfs_descriptor_t *descriptor){
     int rc = 0;
+    int my_socket;
+    struct sockaddr_un sockn;
 
     /* init caches here, thread pool, terminal detach, sockets */
+    my_socket = socket( AF_UNIX, SOCK_STREAM, 0);    
+    if( my_socket < 0){
+        TRACE_ERRNO("Socket");
+        return( -1);
+    }
 
+    memset( &sockn, 0, sizeof( sockn));
+    sockn.sun_family = AF_UNIX;
 
     return(rc);
 }

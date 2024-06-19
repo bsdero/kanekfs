@@ -117,7 +117,7 @@ int extent_write( int fd, char *extent, uint64_t addr, int block_num){
 
 
 int kfs_config_read( char *filename, kfs_config_t *conf){
-    char *s, buff[256];
+    char *s, buff[KFS_FILENAME_LEN];
     char delim[] = " =";
 #define KVLEN                                      KFS_FILENAME_LEN   
     char key[KVLEN], value[KVLEN];
@@ -159,6 +159,10 @@ int kfs_config_read( char *filename, kfs_config_t *conf){
         /* Copy into correct entry in parameters struct */
         if ( strcmp( key, "kfs_file")==0){
             strncpy( conf->kfs_file, value, KVLEN);
+        }else if( strcmp( key, "pid_file")==0){
+            strncpy( conf->pid_file, value, KVLEN);
+        }else if( strcmp( key, "sock_file")==0){
+            strncpy( conf->sock_file, value, KVLEN);
         }else if ( strcmp( key, "cache_page_len")==0){
             conf->cache_page_len = atoi( value);
         }else if ( strcmp( key, "cache_ino_len")==0){
@@ -169,6 +173,8 @@ int kfs_config_read( char *filename, kfs_config_t *conf){
             conf->cache_graph_len = atoi( value);
         }else if ( strcmp( key, "threads_pool")==0){
             conf->threads_pool = atoi( value);
+        }else if ( strcmp( key, "sock_buffer_size")==0){
+            conf->sock_buffer_size = atoi( value);
         }else if ( strcmp( key, "root_super_inode")==0){
             conf->root_super_inode = atoi( value);
         }else if ( strcmp( key, "max_clients")==0){
@@ -186,13 +192,16 @@ int kfs_config_read( char *filename, kfs_config_t *conf){
 
 void kfs_config_display( kfs_config_t *conf){
     printf("Conf: \n");
-    printf("    kfs_file=<%s>\n", conf->kfs_file);
+    printf("    kfs_file='%s'\n", conf->kfs_file);
+    printf("    sock_file='%s'\n", conf->sock_file);
     printf("    cache_page_len=%d\n", conf->cache_page_len);
+    printf("    pid_file='%s'\n", conf->pid_file);
     printf("    cache_ino_len=%d\n", conf->cache_ino_len);   
     printf("    cache_path_len=%d\n", conf->cache_path_len);
     printf("    max_clients=%d\n", conf->max_clients);
     printf("    cache_graph_len=%d\n", conf->cache_graph_len);
     printf("    threads_pool=%d\n", conf->threads_pool);
+    printf("    sock_buffer_size=%d\n", conf->sock_buffer_size);
     printf("    root_super_inode=%d\n", conf->root_super_inode);
 }
 

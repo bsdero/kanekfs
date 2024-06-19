@@ -1,9 +1,11 @@
 #ifndef _KFS_IO_H_
 #define _KFS_IO_H_
 
-#define KFS_FILENAME_LEN                           240
+#define KFS_FILENAME_LEN                           128
 typedef struct{
     char kfs_file[KFS_FILENAME_LEN];
+    char pid_file[KFS_FILENAME_LEN];
+    char sock_file[KFS_FILENAME_LEN];
     int cache_page_len; 
     int cache_ino_len; 
     int cache_path_len;
@@ -11,6 +13,7 @@ typedef struct{
     int threads_pool; 
     int max_clients;
     int root_super_inode;
+    int sock_buffer_size; 
 }kfs_config_t; 
 
 typedef struct{

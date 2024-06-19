@@ -11,7 +11,7 @@
 #include "map.h"
 #include "kfs_io.h"
 
-
+sb_t *__sb = NULL;
 
 char *trim (char *s){
   /* Initialize start, end pointers */
@@ -597,7 +597,7 @@ int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
     kfsex_2_ex( ex, kex);
 
 
-    kfs_sb->sb_flags = KFS_IS_MOUNTED;
+    sb->sb_flags = kfs_sb->sb_flags |= KFS_IS_MOUNTED;
 
     block_write( fd, p, 0);
     free( p); 
@@ -606,7 +606,7 @@ int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
 }
 
 
-int kfs_open( kfs_config_t *config, kfs_context_t *context){
+int kfs_open( kfs_config_t *config, kfs_descriptor_t *descriptor){
     int rc, fd; 
     sb_t sb;
 
@@ -630,14 +630,192 @@ int kfs_open( kfs_config_t *config, kfs_context_t *context){
         return( rc);
     }
 
-    memset( (void *) context, 0, sizeof( kfs_context_t));
-    context->config = *config;
-    context->sb = sb;
-    context->fd = fd; 
+    memset( (void *) descriptor, 0, sizeof( kfs_descriptor_t));
+    descriptor->config = *config;
+    descriptor->sb = sb;
+    descriptor->fd = fd; 
+
+    __sb = &descriptor->sb;
+
 
     return( 0);
 }
 
+void kfs_superblock_display( kfs_descriptor_t *descriptor){
+    sb_t *sb = &descriptor->sb;
+    char buff[240];
+    extent_t *e;
 
+    printf("SuperBlock\n");
+    printf("KFS Flags: 0x%lx\n", sb->sb_flags);
+    printf("KFS root super inode: %lu\n", sb->sb_root_super_inode);
+
+    strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime( &sb->sb_c_time));
+    printf("KFS Ctime: %s\n", buff); 
+
+    strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime( &sb->sb_a_time));    
+    printf("KFS Atime: %s\n", buff); 
+
+    strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime( &sb->sb_m_time));
+    printf("KFS Mtime: %s\n", buff); 
+
+    printf("SUPER INODES:\n");
+    printf("    NumberOfSuperInodes: %lu\n", sb->sb_si_table.capacity );
+    printf("    SuperInodesInUse: %lu\n", sb->sb_si_table.in_use ); 
+    printf("    SuperInodesTableAddress: %lu\n",  
+                sb->sb_si_table.table_extent.ex_block_addr );
+    printf("    SuperInodesTableBlocksNum: %u\n",  
+                sb->sb_si_table.table_extent.ex_block_size );
+    printf("    SuperInodesMapAddress: %lu\n",  
+                sb->sb_si_table.bitmap_extent.ex_block_addr );
+    printf("    SuperInodesMapBlocksNum: %u\n",  
+                sb->sb_si_table.bitmap_extent.ex_block_size );
+
+    printf("SLOTS:\n");
+    printf("    NumberOfSlots: %lu\n", sb->sb_slot_table.capacity );
+    printf("    SlotsInUse: %lu\n", sb->sb_slot_table.in_use ); 
+    printf("    SlotsTableAddress: %lu\n",  
+                sb->sb_slot_table.table_extent.ex_block_addr );
+    printf("    SlotsTableBlocksNum: %u\n",  
+                sb->sb_slot_table.table_extent.ex_block_size );
+    printf("    SlotsMapAddress: %lu\n",  
+                sb->sb_slot_table.bitmap_extent.ex_block_addr );
+    printf("    SlotsMapBlocksNum: %u\n",  
+                sb->sb_slot_table.bitmap_extent.ex_block_size );
+
+    printf("KFS Bitmap:\n");
+    printf("    KFSBlockMapAddress: %lu\n",  
+                sb->sb_blockmap.bitmap_extent.ex_block_addr );
+    printf("    KFSBlockMapBlocksNum: %u\n",  
+                sb->sb_blockmap.bitmap_extent.ex_block_size );
+        
+    printf("KFS BlocksRange:\n");
+    printf("    SuperBlock: [0]\n");
+
+    e = &sb->sb_si_table.table_extent;
+    printf("    SuperInodesTable: [%lu-%lu]\n",
+           e->ex_block_addr,
+           e->ex_block_addr + e->ex_block_size - 1);
+
+    e = &sb->sb_slot_table.table_extent;
+    printf("    SlotsTable: [%lu-%lu]\n",
+           e->ex_block_addr,
+           e->ex_block_addr + e->ex_block_size - 1);
+               
+    e = &sb->sb_si_table.bitmap_extent;
+    printf("    SuperInodesMap: [%lu-%lu]\n",
+           e->ex_block_addr,
+           e->ex_block_addr + e->ex_block_size - 1);
+
+    e = &sb->sb_slot_table.bitmap_extent;
+    printf("    SlotsMap: [%lu-%lu]\n",
+           e->ex_block_addr,
+           e->ex_block_addr + e->ex_block_size - 1);
+
+    e = &sb->sb_blockmap.bitmap_extent;
+    printf("    KFSBlockMap: [%lu-%lu]\n",
+           e->ex_block_addr,
+           e->ex_block_addr + e->ex_block_size - 1);
+
+
+}
+
+int kfs_superblock_update( kfs_descriptor_t *descriptor){
+    char *p; 
+    int rc; 
+    kfs_superblock_t *ksb;
+    kfs_extent_t *kex;
+    extent_t *ex;
+    time_t now;
+    sb_t *sb = &descriptor->sb;
+     
+    p = pages_alloc( 1);
+
+    rc = block_read( descriptor->fd, p, 0);
+    if( rc < 0){
+        return( rc);
+    }
+
+    ksb = (kfs_superblock_t *) p;
+
+    if( ksb->sb_magic != KFS_MAGIC){
+        TRACE_ERR("Not a KFS file system. Abort.");
+        return( -1);
+    }
+
+    now = time( NULL);
+
+    ksb->sb_m_time = sb->sb_m_time = now; 
+    ksb->sb_a_time = sb->sb_a_time = now; 
+
+    ksb->sb_root_super_inode = sb->sb_root_super_inode;
+    ksb->sb_flags = sb->sb_flags;
+
+    ksb->sb_si_table.capacity = sb->sb_si_table.capacity;
+    ksb->sb_si_table.in_use = sb->sb_si_table.in_use;
+    kex = &ksb->sb_si_table.table_extent;
+    ex = &sb->sb_si_table.table_extent;
+    ex_2_kfsex( kex, ex);
+    kex = &ksb->sb_si_table.bitmap_extent;
+    ex = &sb->sb_si_table.bitmap_extent;
+    ex_2_kfsex( kex, ex);
+
+    ksb->sb_slot_table.capacity = sb->sb_slot_table.capacity;
+    ksb->sb_slot_table.in_use = sb->sb_slot_table.in_use;
+    kex = &ksb->sb_slot_table.table_extent;
+    ex = &sb->sb_slot_table.table_extent;
+    ex_2_kfsex( kex, ex);
+    kex = &ksb->sb_slot_table.bitmap_extent;
+    ex = &sb->sb_slot_table.bitmap_extent;
+    ex_2_kfsex( kex, ex);
+
+
+    ksb->sb_blockmap.capacity = sb->sb_blockmap.capacity;
+    ksb->sb_blockmap.in_use = sb->sb_blockmap.in_use;
+    kex = &ksb->sb_blockmap.table_extent;
+    ex = &sb->sb_blockmap.table_extent;
+    ex_2_kfsex( kex, ex);
+    kex = &ksb->sb_blockmap.bitmap_extent;
+    ex = &sb->sb_blockmap.bitmap_extent;
+    ex_2_kfsex( kex, ex);
+
+
+    block_write( descriptor->fd, p, 0);
+    free( p); 
+    return(0);
+}
+
+int kfs_superblock_close( kfs_descriptor_t *descriptor){
+    sb_t *sb = &descriptor->sb;
+    int rc;
+
+    sb->sb_flags = sb->sb_flags &~ KFS_IS_MOUNTED;
+    rc = kfs_superblock_update( descriptor);
+
+    close( descriptor->fd);
+    memset( descriptor, 0, sizeof( kfs_descriptor_t ));
+
+    __sb = NULL;
+    return(rc);
+}
+
+
+int kfs_node_new( int node_num, sinode_t *sinode);
+int kfs_node_read( int node_num, sinode_t *sinode);
+int kfs_node_remove( int node_num);
+int kfs_node_update( int node_num, sinode_t *sinode);
+int kfs_node_list_edges( int node_num);
+int kfs_node_read_data( int node_num, char *p, size_t len, int offset);
+int kfs_node_write_data( int node_num, char *p, size_t len, int offset);
+
+int kfs_mklink( sinode_t *sinode, int node_to, char *name, edge_t *edge);
+int kfs_get_edge( sinode_t *sinode, int node_to, kfs_edge_t *edge);
+int kfs_update_edge( kfs_edge_t *edge);
+int kfs_remove_edge( kfs_edge_t *edge);
+
+int kfs_slot_new();
+int kfs_slot_remove(int slot_id);
+int kfs_slot_get( int slot_id, dict_t *d);
+int kfs_slot_update( int slot_id, dict_t *d);
 
 

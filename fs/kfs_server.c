@@ -112,7 +112,7 @@ int parse_opts( int argc, char **argv, options_t *options){
 }
 
 
-int kfs_server_init( kfs_config_t *config, kfs_context_t *context){
+int kfs_server_init( kfs_config_t *config, kfs_descriptor_t *descriptor){
     int rc = 0;
 
     /* init caches here, thread pool, terminal detach, sockets */
@@ -127,7 +127,7 @@ int main( int argc, char **argv){
     int rc;
     options_t options;
     kfs_config_t config;
-    kfs_context_t context; 
+    kfs_descriptor_t descriptor; 
 
     rc = parse_opts( argc, argv, &options);
     if( rc < 0){
@@ -142,7 +142,7 @@ int main( int argc, char **argv){
 
     kfs_config_display( &config);
 
-    rc = kfs_server_init( &config, &context );
+    rc = kfs_server_init( &config, &descriptor );
     if( rc < 0){
         return( rc);
     }

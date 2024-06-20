@@ -24,9 +24,8 @@
 #define OPT_CONF                                   0x08
 
 
-#define FILENAME_LEN                               250
 typedef struct{
-    char conf_file[FILENAME_LEN];
+    char conf_file[KFS_FILENAME_LEN];
     unsigned int flags;
 }options_t;
 
@@ -103,7 +102,7 @@ int parse_opts( int argc, char **argv, options_t *options){
     }
 
     if( (flags & OPT_CONF ) == 0){
-        snprintf( options->conf_file, FILENAME_LEN, "%s", KFS_SERVER_CONF);
+        snprintf( options->conf_file, KFS_FILENAME_LEN, "%s", KFS_SERVER_CONF);
         flags |= OPT_CONF;
     }
 
@@ -118,8 +117,15 @@ int kfs_server_init( kfs_config_t *config, kfs_descriptor_t *descriptor){
     int rc = 0;
     int my_socket;
     struct sockaddr_un sockn;
+    int ppid, pid;
+
 
     /* init caches here, thread pool, terminal detach, sockets */
+
+
+    
+
+
     my_socket = socket( AF_UNIX, SOCK_STREAM, 0);    
     if( my_socket < 0){
         TRACE_ERRNO("Socket");
@@ -128,6 +134,14 @@ int kfs_server_init( kfs_config_t *config, kfs_descriptor_t *descriptor){
 
     memset( &sockn, 0, sizeof( sockn));
     sockn.sun_family = AF_UNIX;
+    strncpy( sockn.sun_path, config->sockfile, KFS_FILENAME_LEN - 1);
+    rc = bind( my_socket, (const struct sockaddr *) &sockn, sizeof(sockn));
+    if (rc == -1) {
+        TRACE_ERRNO("bind");
+        return(-1);
+    }
+
+
 
     return(rc);
 }

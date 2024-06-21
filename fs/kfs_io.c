@@ -8,8 +8,6 @@
 #include <sys/ioctl.h>
 #include <ctype.h>
 #include "kfs.h"
-#include "map.h"
-#include "kfs_io.h"
 
 sb_t *__sb = NULL;
 

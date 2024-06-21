@@ -41,6 +41,9 @@ void kfs_config_display( kfs_config_t *conf);
 int kfs_verify( char *filename, int verbose, int extra_verification);
 
 int kfs_open( kfs_config_t *config, kfs_descriptor_t *descriptor);
+void kfs_superblock_display( kfs_descriptor_t *descriptor);
+int kfs_superblock_update( kfs_descriptor_t *descriptor);
+int kfs_superblock_close( kfs_descriptor_t *descriptor);
 
 #endif
 

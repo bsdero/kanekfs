@@ -113,129 +113,6 @@ int parse_opts( int argc, char **argv, options_t *options){
     return(0);
 }
 
-int close_non_standard_file_descriptors(){
-    unsigned int i;
-
-    struct rlimit rlim;
-    int num_of_fds = getrlimit(RLIMIT_NOFILE, &rlim);
-
-    if(num_of_fds == -1)
-        return( -1);
-
-    for(i = 3; i < num_of_fds; i++)
-        close(i);
-
-    return(0);
-}
-
-int term_detach(){
-    int pid; 
-
-
-    pid = fork();
-    switch (pid) {
-        case -1:
-            TRACE_SYSERR("fork");
-            return( -1);
-        default:
-            printf("Parent exiting.");
-            return(0);
-    }
-
-    setsid();
-
-
-}
-
-
-int kfs_server_init( kfs_config_t *config, kfs_descriptor_t *descriptor){
-    int ret = 0;
-    int server_socket, data_socket;
-    struct sockaddr_un sockn;
-    int pid;
-    char buffer[256];
-
-
-    /* init caches here, thread pool, terminal detach, sockets */
-    server_socket = socket( AF_UNIX, SOCK_STREAM, 0);    
-    if( server_socket < 0){
-        TRACE_ERRNO("Socket");
-        return( -1);
-    }
-
-    memset( &sockn, 0, sizeof( sockn));
-    sockn.sun_family = AF_UNIX;
-    strncpy( sockn.sun_path, 
-             config->sock_file, 
-             sizeof( sockn.sun_path) - 1);
-
-    ret = bind( server_socket, (struct sockaddr *) &sockn, sizeof(sockn));
-    if (ret == -1) {
-        TRACE_ERRNO("bind");
-        return(-1);
-    }
-
-    ret = listen( server_socket, config->max_clients);
-    if (ret == -1) {
-        TRACE_ERRNO("listen");
-        return( -1);
-    }
-
-    /* This is the main loop for handling connections. */
-    for (;;) {
-        /* Wait for incoming connection. */
-
-        data_socket = accept(server_socket, NULL, NULL);
-        if (data_socket == -1) {
-            TRACE_ERRNO("accept");
-            return(-1);
-        }
-
-        
-        pid = fork();
-        if( pid < 0){
-            TRACE_ERRNO("fork");
-            return(-1);
-        }else if( pid == 0){ /* child process */
-            close( server_socket);
-
-
-            /* Handle protocol */
-            ret = read(data_socket, buffer, sizeof(buffer));
-            if (ret == -1) {
-                 TRACE_ERRNO("read");
-                 return(-1);
-            }
-
-            /* Ensure buffer is 0-terminated. */
-            buffer[sizeof(buffer) - 1] = 0;
-
-            /* Send result. */
-            strncpy(buffer, "HI", 5);
-            ret = write(data_socket, buffer, sizeof(buffer));
-            if (ret == -1) {
-                TRACE_ERRNO("write");
-                return( -1);
-            }
-
-            /* Close socket. */
-            close(data_socket);
-            return(0);
-        }else{
-           /* parent */
-           close(data_socket);
-        }
-
-    }    
-
-    close( server_socket);
-    /* Unlink the socket. */
-    unlink( config->sock_file); 
-
-    return(0);
-}
-
-
 
 int main( int argc, char **argv){
     int rc;
@@ -256,12 +133,18 @@ int main( int argc, char **argv){
 
     kfs_config_display( &config);
 
-    rc = kfs_server_init( &config, &descriptor );
-    if( rc < 0){
-        return( rc);
-    }
+    rc = kfs_open( &config, &descriptor);
+    if( rc < 0) goto quit;
 
-//    rc = kfs_server_run( &server);
-    return( rc);
+    kfs_superblock_display( &descriptor);
+    rc = kfs_superblock_update( &descriptor);
+    if( rc < 0) goto quit;
+
+    rc = kfs_superblock_close( &descriptor);
+    if( rc < 0) goto quit;
+
+quit:;
+    return rc;
+
 }
 

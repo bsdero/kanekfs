@@ -56,7 +56,7 @@ typedef struct{
 typedef struct{
     uint64_t slot_id;
     uint64_t slot_sino_owner;
-    uint32_t slot_link_owner;
+    uint16_t slot_link_owner;
      
 #define SLOT_OWNER_SB            0x0000
 #define SLOT_OWNER_INO           0x0001
@@ -65,7 +65,7 @@ typedef struct{
 
 #define SLOT_IN_USE              0x0100
 #define SLOT_UPDATE              0x1000
-    uint32_t slot_flags;
+    uint16_t slot_flags;
     dict_t slot_d;
     extent_t extent;
 }slot_t;
@@ -94,9 +94,9 @@ typedef struct{
 
 typedef struct{
     uint64_t ed_sinode; /* which node is this edge pointing to */
-    uint64_t ed_hash_name;     /* hash79 */
     char *ed_name;
-
+    uint32_t ed_hash_name;     /* hash */
+ 
 #define KFS_EDGE_IS_DENTRY       0x0100 /* is this edge traversable? */
 #define KFS_EDGE_IS_VISIBLE      0x0200 /* is this edge visible? */
 #define KFS_EDGE_FULL_CHECK      0x0400 /* hash is not enough, check name */

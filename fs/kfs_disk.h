@@ -225,12 +225,13 @@ typedef struct{
  */
 typedef struct{ /* entry for the slots index. This structure helps to locate
                    slot data faster */
-    uint32_t slot_id;     /* slot ID. Should be stored in sequence. */
-    uint32_t slot_sino_owner;
-    uint32_t slot_link_owner;
-    uint32_t slot_flags;  /* the same flags than in kfs_mem.h in slot_t*/
+    uint64_t slot_id;     /* slot ID. Should be stored in sequence. */
+    uint64_t slot_sino_owner;
 
     kfs_extent_t slot_extent;  /* extent with this slot entries.*/
+    
+    uint16_t slot_link_owner;
+    uint16_t slot_flags;  /* the same flags than in kfs_mem.h in slot_t*/
 }kfs_slot_t;
 
 
@@ -256,7 +257,6 @@ typedef struct{
 typedef struct{
     uint64_t ed_link_id; /* link ID */
     uint64_t ed_slot_id; /* slot ID */
-    
     uint64_t ed_sinode; /* which node is this edge pointing to */
     uint32_t ed_hash_name; 
     uint16_t ed_rec_len; /* this record total length ( multiple of 8) */
@@ -276,8 +276,8 @@ typedef struct{
     uint64_t si_m_time;
 
 
-    uint32_t si_slot_id; /* slot ID */
-    uint32_t si_data_len; /* file size */
+    uint64_t si_slot_id; /* slot ID */
+    uint64_t si_data_len; /* file size */
 
 
     /* cache flags may be used here */

@@ -206,9 +206,9 @@ void kfs_config_display( kfs_config_t *conf){
 
 int kfs_verify( char *filename, int verbose, int extra_verification){
     char buff[256];
-    uint64_t size, addr;
+    uint64_t size, addr, last_ino, sipp, slpp;
     struct stat st;
-    int rc, fd, i;
+    int rc, fd;
     char *p, *pex;
     kfs_superblock_t *sb;
     kfs_extent_t *e;
@@ -384,18 +384,19 @@ int kfs_verify( char *filename, int verbose, int extra_verification){
 
     block_read( fd, pex, addr);
 
-    si = ( kfs_sinode_t *) pex;
-    i = 0;
-    while( si->si_id < sb->sb_si_table.capacity-1){
-       if( i >= KFS_BLOCKSIZE){
-            TRACE_ERR("Unexpected, the super inode ID is beyond the page.");
-            TRACE_ERR("last inode: [%lu-0x%lx]", si->si_id, si->si_id);
-            return(-1);
-        }
-        si++;
-        i += sizeof( kfs_sinode_t);
-    }
+    sipp = (KFS_BLOCKSIZE / sizeof( kfs_sinode_t));
 
+    /* get last inode */
+    si = ( kfs_sinode_t *) pex;
+    si = &si[sipp - 1];
+
+    last_ino = si->si_id;
+
+    if( last_ino != sb->sb_si_table.capacity-1){
+        TRACE_ERR("Unexpected, the super inode ID is not fine");
+        TRACE_ERR("last inode: [%lu-0x%lx]", last_ino, last_ino);
+        return(-1);
+    }
     if( verbose){
         printf("    -All seems to be fine, last inode: [%lu-0x%lx]\n", 
                     si->si_id, si->si_id);
@@ -431,27 +432,27 @@ int kfs_verify( char *filename, int verbose, int extra_verification){
     }
     block_read( fd, pex, addr);
 
+    slpp = (KFS_BLOCKSIZE / sizeof( kfs_slot_t));
+
+    /* get last inode */
     slot = ( kfs_slot_t *) pex;
-    i = 0;
-    while( slot->slot_id < sb->sb_slot_table.capacity-1){
-       if( i >= KFS_BLOCKSIZE){
-            TRACE_ERR("Unexpected, the slot ID is beyond the page.");
-            TRACE_ERR("last inode: [%u-0x%x]", 
+    slot = &slot[slpp - 1];
+
+    if( slot->slot_id != sb->sb_slot_table.capacity-1){
+        TRACE_ERR("Unexpected, the slot ID is not fine.");
+        TRACE_ERR("last slot: [%lu-0x%lx]", 
                     slot->slot_id, slot->slot_id);
             return(-1);
-        }
-        slot++;
-        i += sizeof( kfs_slot_t);
     }
    
     if( verbose){
-        printf("    -All seems to be fine, last slot: [%u-0x%x]\n", 
+        printf("    -All seems to be fine, last slot: [%lu-0x%lx]\n", 
                      slot->slot_id, slot->slot_id);
     }
 
 
     if( verbose){
-        printf("\nChecking Map extents\n");
+        printf("Checking Map extents\n");
     }
 
     addr = sb->sb_si_table.bitmap_extent.ee_block_addr;
@@ -820,7 +821,7 @@ int kfs_get_edge( sinode_t *sinode, int node_to, kfs_edge_t *edge);
 int kfs_update_edge( kfs_edge_t *edge);
 int kfs_remove_edge( kfs_edge_t *edge);
 
-int kfs_slot_new();
+uint64_t kfs_slot_new();
 int kfs_slot_remove(int slot_id);
 int kfs_slot_get( int slot_id, dict_t *d);
 int kfs_slot_update( int slot_id, dict_t *d);

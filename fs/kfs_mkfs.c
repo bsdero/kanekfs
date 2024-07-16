@@ -51,6 +51,7 @@ typedef struct{
     uint64_t in_file_size_in_mbytes;
     uint64_t in_file_size_in_blocks;
     int in_percentage;
+    uint64_t out_sinodes_per_block, out_slots_per_block;
     uint64_t out_bitmap_size_in_blocks;
     uint64_t out_slots_table_in_blocks, out_slots_bitmap_blocks_num;
     uint64_t out_sinodes_table_in_blocks, out_sinodes_bitmap_blocks_num;
@@ -323,8 +324,7 @@ int build_sinodes( int fd){
     time_t current_time;
     kfs_extent_header_t *ex_header = NULL;
     kfs_sinode_t *sino;
-    int block_num; 
-    uint64_t i, sino_num;
+    uint64_t i, block_num, sino_num;
     char *p, *slp;
     unsigned char *bitmap;
     blocks_calc_t *bc = &blocks_calc;
@@ -355,7 +355,9 @@ int build_sinodes( int fd){
 
     /* fill in the first inode */
     sino_num = 0;
-    sino = ( kfs_sinode_t *) p + sizeof( kfs_extent_header_t);
+    slp = p + sizeof( kfs_extent_header_t);
+
+    sino = ( kfs_sinode_t *) slp;
     sino->si_a_time = current_time;
     sino->si_c_time = current_time;
     sino->si_m_time = current_time;
@@ -363,39 +365,35 @@ int build_sinodes( int fd){
     sino->si_id = sino_num++;
 
     /* fill in the other inodes */
-    i = sizeof( kfs_extent_header_t) + sizeof( kfs_sinode_t);
-    while( i < KFS_BLOCKSIZE && sino_num < bc->out_sinodes_num){
+    for( i = 1; i < bc->out_sinodes_per_block; i++){
         sino->si_id = sino_num++;
         sino++;
-        i += sizeof( kfs_sinode_t);
     }
 
     /* write the first block of the extent with the sinodes table */
     liminf = block_num = 1;
     block_write( fd, p, block_num++);
+    limsup = liminf + bc->out_sinodes_table_in_blocks;
 
-    /* write out the remaining blocks of the table. 
-     * -1 because we already wrote 1 block 
-     */
-    while( block_num <= bc->out_sinodes_table_in_blocks){
+    /* write out the remaining blocks of the table */
+    for( ; block_num < limsup; block_num++){
         memset( (void *) p, 0, KFS_BLOCKSIZE);
  
         i = 0;
         sino = ( kfs_sinode_t *) p;
 
-        while( i < KFS_BLOCKSIZE && sino_num < bc->out_sinodes_num){
+        for( i = 0; i < bc->out_sinodes_per_block; i++){
             sino->si_id = sino_num++;
             sino++;
-            i += sizeof( kfs_sinode_t);
         }
 
-        block_write( fd, p, block_num++);
+        block_write( fd, p, block_num);
     }
 
-    limsup = block_num - 1;
+
     PRINTV("    -Written SuperInodes table blocks: [%lu-%lu]",
                 liminf,
-                limsup); 
+                limsup - 1); 
     PRINTV("    -Written SuperInodes num: [%lu, %lx]", sino_num, sino_num); 
     free( p);
 
@@ -425,7 +423,7 @@ int build_sinodes( int fd){
     limsup = sinode_map_block + i - 1;
     PRINTV("    -Writing SuperInodes blocks map: [%lu-%lu]", 
                 liminf, 
-                limsup);
+                limsup - 1);
     
     free( p);
 
@@ -481,16 +479,13 @@ int build_slots( int fd){
     ex_header->eh_entries_in_use = 0;
     ex_header->eh_entries_capacity = bc->out_slots_num;
     ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;
-    i = sizeof( kfs_extent_header_t);
 
     /* fill in the slots */
     slot_num = 0;
     slot = ( kfs_slot_t *) slp + sizeof( kfs_extent_header_t);
-
-    while( i < KFS_BLOCKSIZE && slot_num < bc->out_slots_num){
+    for( i = 0; i < bc->out_slots_per_block; i++){
         slot->slot_id = slot_num++;
-        slot++;
-        i += sizeof( kfs_slot_t);
+       slot++;
     }
 
     /* write the first block of the extent with the slots table */
@@ -500,23 +495,22 @@ int build_slots( int fd){
     limsup = liminf + bc->out_slots_table_in_blocks;
 
     /* write out the remaining blocks of the table */
-    while( block_num < limsup){
+    for( ; block_num < limsup; block_num++){
         memset( (void *) slp, 0, KFS_BLOCKSIZE);
  
         i = 0;
         slot = ( kfs_slot_t *) p;
 
-        while( i < KFS_BLOCKSIZE && slot_num < bc->out_slots_num){
+        for( i = 0; i < bc->out_slots_per_block; i++){
             slot->slot_id = slot_num++;
             slot++;
-            i += sizeof( kfs_slot_t);
         }
 
-        block_write( fd, p, block_num++);
+        block_write( fd, p, block_num);
     }
-    free( p);
-    limsup = block_num - 1;
 
+    free( p);
+    PRINTV("    -Written last slot num: [%lu, %lx]", slot_num, slot_num); 
     PRINTV("    -Writing slots table blocks: [%lu-%lu]", 
                 liminf, 
                 limsup);
@@ -712,6 +706,8 @@ int blocks_results_display(){
         bc->out_slots_table_in_blocks, bc->out_slots_bitmap_blocks_num);
     printf("    SinodesTableInBlocks=%lu, SinodesMapInBlocks=%lu\n", 
         bc->out_sinodes_table_in_blocks, bc->out_sinodes_bitmap_blocks_num);
+    printf("    SlotsPerBlock=%lu, SinodesPerBlock=%lu\n", 
+        bc->out_slots_per_block, bc->out_sinodes_per_block);
 
     return(0);
 }
@@ -729,8 +725,7 @@ int compute_blocks(){
     uint64_t slots_blocks, slots_map_blocks, slots_result;
     uint64_t sinodes_per_block;
     uint64_t sinodes_blocks, sinodes_map_blocks, sinodes_result;
-    uint64_t slots_in_1st_block, sinodes_in_1st_block;
-    uint64_t bits_per_block, n;
+    uint64_t bits_per_block, rem, n;
 
     /* clean ddata structure */
     memset( ( void *) bc, 0, sizeof( blocks_calc_t));
@@ -749,22 +744,25 @@ int compute_blocks(){
     bc->in_percentage = options.percentage;
  
     /* do first real computations */
-    n =  KFS_BLOCKSIZE - sizeof( kfs_extent_header_t); 
-    slots_in_1st_block = n / sizeof( kfs_slot_t);
-    slots_per_block = KFS_BLOCKSIZE / sizeof( kfs_slot_t);
-
-
-    sinodes_in_1st_block = n / sizeof( kfs_sinode_t);
-    sinodes_per_block = KFS_BLOCKSIZE / sizeof( kfs_sinode_t);
+    slots_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) / 
+                      sizeof( kfs_slot_t);
+                      
+    sinodes_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) /
+                        sizeof( kfs_sinode_t);
  
+    bc->out_slots_per_block = slots_per_block;
+    bc->out_sinodes_per_block = sinodes_per_block;
 
-    /* now calculate how many bits per block can have our bitmap */
+    /* now calculate how many bits per block can our bitmap have */
     bits_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) * 8;
+
+    /* add super block */
+    total_blocks_required += 1;
+ 
 
     /* given the file/device size, and the percentage, calculate how
      * many super inodes and slots do we need */
     if( bc->in_sinodes_num == 0 && bc->in_slots_num == 0){
-        total_blocks_required += 1; /* super block */
 
         /* calculate how many blocks for slots do we have */
         slots_blocks = (uint64_t) ( (float)bc->in_file_size_in_blocks * 
@@ -775,15 +773,14 @@ int compute_blocks(){
         total_blocks_required += slots_blocks + sinodes_blocks;
 
         /* how many blocks our slots map need */
-        slots_map_blocks = ( slots_blocks / bits_per_block) + 1;
-
+        rem = (( slots_blocks % bits_per_block) == 0 ) ? 0 : 1;
+        slots_map_blocks = ( slots_blocks / bits_per_block) + rem;
+                           
         /* real number of blocks for slots we have */
         slots_blocks -= slots_map_blocks;
 
         /* now get the real slots number we can have */
-        slots_result = ((slots_blocks - 1) * slots_per_block) + 
-                       slots_in_1st_block;
-
+        slots_result = slots_blocks * slots_per_block;
 
         bc->out_slots_bitmap_blocks_num = slots_map_blocks;
         bc->out_slots_table_in_blocks = slots_blocks;
@@ -793,15 +790,14 @@ int compute_blocks(){
          * in blocks  */
  
         /* how many blocks our super inodes map need */
-        sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + 1;
+        rem = (( sinodes_blocks % bits_per_block) == 0) ? 0 : 1;
+        sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + rem;
 
         /* real number of blocks for super inodes we have */
         sinodes_blocks -= sinodes_map_blocks;
 
         /* now get the real super inodes number we can have */
-        sinodes_result = ((sinodes_blocks - 1) * sinodes_per_block) + 
-                         sinodes_in_1st_block;
-
+        sinodes_result = sinodes_blocks * sinodes_per_block;
 
         bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
         bc->out_sinodes_table_in_blocks = sinodes_blocks;
@@ -810,9 +806,11 @@ int compute_blocks(){
               from the CLI, so calculate how many blocks are required and 
               how big the file/device should  be. */
         if( bc->in_sinodes_num != 0){
-            sinodes_blocks = ( (bc->in_sinodes_num - sinodes_in_1st_block) / 
-                               sinodes_per_block) + 2;
-            sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + 1;
+            rem = (( bc->in_sinodes_num % sinodes_per_block) == 0) ? 0 : 1; 
+            sinodes_blocks = ( bc->in_sinodes_num / sinodes_per_block) + rem;
+
+            rem = (( sinodes_blocks % bits_per_block) == 0) ? 0 : 1; 
+            sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + rem;
             sinodes_blocks -= sinodes_map_blocks;
             bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
             bc->out_sinodes_table_in_blocks = sinodes_blocks;
@@ -821,10 +819,11 @@ int compute_blocks(){
         }
 
         if( bc->in_slots_num != 0){
-            slots_blocks = ( (bc->in_slots_num - slots_in_1st_block) / 
-                                slots_per_block) + 2;
+            rem = (( bc->in_slots_num % slots_per_block) == 0) ? 0 : 1;
+            slots_blocks = ( bc->in_slots_num / slots_per_block) + rem;
             /* how many blocks our slots map need */
-            slots_map_blocks = ( slots_blocks / bits_per_block) + 1;
+            rem = ( ( slots_blocks % bits_per_block) == 0) ? 0 : 1;
+            slots_map_blocks = ( slots_blocks / bits_per_block) + rem;
             slots_blocks -= slots_map_blocks;
             bc->out_slots_bitmap_blocks_num = slots_map_blocks;
             bc->out_slots_table_in_blocks = slots_blocks;
@@ -841,12 +840,14 @@ int compute_blocks(){
         bc->in_file_size_in_blocks -= total_blocks_required; 
         */
         bc->in_file_size_in_mbytes = bc->in_file_size_in_blocks / 128;
-        total_blocks_required += 1;
-    }
+   }
+
 
 
     /* now fill in the bitmap size in blocks and finish calculations */
-    bitmap_size_in_blocks = (bc->in_file_size_in_blocks / bits_per_block) + 1;
+    rem = ( (bc->in_file_size_in_blocks % bits_per_block) == 0 )? 0 : 1; 
+    bitmap_size_in_blocks = (bc->in_file_size_in_blocks / bits_per_block) + 
+                            rem;
     bc->out_bitmap_size_in_blocks = bitmap_size_in_blocks;
     total_blocks_required += bitmap_size_in_blocks;
 

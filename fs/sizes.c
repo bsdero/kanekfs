@@ -14,11 +14,11 @@ int main(){
     printf("kfs_si_table_t=%ld\n", sizeof( kfs_si_table_t));
     printf("kfs_blockmap_t=%ld\n", sizeof( kfs_blockmap_t));
     printf("kfs_superblock_t=%ld\n", sizeof( kfs_superblock_t));
-
-    printf("SlotPerBlock=%ld, mod=%ld\n", 
+    printf("Blocksize=%d\n", KFS_BLOCKSIZE);
+    printf("SlotPerBlock=%ld, remaining=%ld\n", 
             KFS_BLOCKSIZE/sizeof( kfs_slot_t),
             KFS_BLOCKSIZE%sizeof( kfs_slot_t));
-     printf("SinodePerBlock=%ld, mod=%ld\n", 
+     printf("SinodePerBlock=%ld, remaining=%ld\n", 
             KFS_BLOCKSIZE/sizeof( kfs_sinode_t),
             KFS_BLOCKSIZE%sizeof( kfs_sinode_t));
     return(0);

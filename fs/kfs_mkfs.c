@@ -722,9 +722,9 @@ int compute_blocks(){
 
     uint64_t total_blocks_required = 0, bitmap_size_in_blocks = 0;
     uint64_t slots_per_block;
-    uint64_t slots_blocks, slots_map_blocks, slots_result;
+    uint64_t slots_blocks, slots_map_blocks;
     uint64_t sinodes_per_block;
-    uint64_t sinodes_blocks, sinodes_map_blocks, sinodes_result;
+    uint64_t sinodes_blocks, sinodes_map_blocks;
     uint64_t bits_per_block, rem, n;
 
     /* clean ddata structure */
@@ -757,7 +757,7 @@ int compute_blocks(){
     bits_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) * 8;
 
     /* add super block */
-    total_blocks_required += 1;
+    total_blocks_required = 1;
  
 
     /* given the file/device size, and the percentage, calculate how
@@ -779,12 +779,9 @@ int compute_blocks(){
         /* real number of blocks for slots we have */
         slots_blocks -= slots_map_blocks;
 
-        /* now get the real slots number we can have */
-        slots_result = slots_blocks * slots_per_block;
-
         bc->out_slots_bitmap_blocks_num = slots_map_blocks;
         bc->out_slots_table_in_blocks = slots_blocks;
-        bc->out_slots_num = slots_result;
+        bc->out_slots_num = slots_blocks * slots_per_block;
 
         /* calculate how many super inodes are available, from the file size 
          * in blocks  */
@@ -796,12 +793,9 @@ int compute_blocks(){
         /* real number of blocks for super inodes we have */
         sinodes_blocks -= sinodes_map_blocks;
 
-        /* now get the real super inodes number we can have */
-        sinodes_result = sinodes_blocks * sinodes_per_block;
-
         bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
         bc->out_sinodes_table_in_blocks = sinodes_blocks;
-        bc->out_sinodes_num = sinodes_result;
+        bc->out_sinodes_num = sinodes_blocks * sinodes_per_block;
     }else{ /* we have a fixed number of super inodes and slots passed in
               from the CLI, so calculate how many blocks are required and 
               how big the file/device should  be. */
@@ -811,11 +805,11 @@ int compute_blocks(){
 
             rem = (( sinodes_blocks % bits_per_block) == 0) ? 0 : 1; 
             sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + rem;
-            sinodes_blocks -= sinodes_map_blocks;
             bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
             bc->out_sinodes_table_in_blocks = sinodes_blocks;
             total_blocks_required += sinodes_map_blocks + sinodes_blocks;
-            bc->out_sinodes_num = bc->in_sinodes_num;
+            bc->out_sinodes_num = sinodes_blocks * sinodes_per_block;
+
         }
 
         if( bc->in_slots_num != 0){
@@ -824,11 +818,10 @@ int compute_blocks(){
             /* how many blocks our slots map need */
             rem = ( ( slots_blocks % bits_per_block) == 0) ? 0 : 1;
             slots_map_blocks = ( slots_blocks / bits_per_block) + rem;
-            slots_blocks -= slots_map_blocks;
             bc->out_slots_bitmap_blocks_num = slots_map_blocks;
             bc->out_slots_table_in_blocks = slots_blocks;
             total_blocks_required += slots_map_blocks + slots_blocks;
-            bc->out_slots_num = bc->in_slots_num;
+            bc->out_slots_num = slots_blocks * slots_per_block;
         }
 
         /* calculate total device size */
@@ -836,9 +829,6 @@ int compute_blocks(){
         bc->in_file_size_in_blocks = (uint64_t) ((float) n * 
                                         ( 100.0 / (float) bc->in_percentage));
 
-        /* minus slots and sinodes part 
-        bc->in_file_size_in_blocks -= total_blocks_required; 
-        */
         bc->in_file_size_in_mbytes = bc->in_file_size_in_blocks / 128;
    }
 

@@ -45,47 +45,54 @@ int byte_count_bits( int start, int numbits, char byte, int clear_or_set);
  *      numbits bits. *count will have the number of bits found */
 int byte_find_gap( int start, int numbits, char byte, int *count);
 
+/* get bit status in a byte */
+int byte_get_bit( unsigned char byte, int bit);
 
-
-/* set one bit in the blockmap pointed by bm, which has total_blocks bits. 
- * block_address is the bit to change and clear_or_set is a flag to set
+/* set one bit in the bitmap pointed by bm, which has total_bits bits. 
+ * bit_address is the bit to change and clear_or_set is a flag to set
  * or clear the bit. */
 int bm_set_bit( unsigned char *bm,
-                uint64_t total_blocks,
-                uint64_t block_address, 
+                uint64_t total_bits,
+                uint64_t bit_address, 
                 int clear_or_set);
 
-/* set a group of continuous bits in the blockmap pointed by bm, which has 
- * total_blocks bits. block_address is the start of the contiguous bits 
+/* get bit status in a bitmap */
+int bm_get_bit( unsigned char *bm, 
+                uint64_t total_bits, 
+                uint64_t bit_address);
+
+
+/* set a group of continuous bits in the bitmap pointed by bm, which has 
+ * total_bits bits. bit_address is the start of the contiguous bits 
  * extent to update and clear_or_set is a flag to set or clear the bits. */
 int bm_set_extent( unsigned char *bm,
-                   uint64_t total_blocks,
-                   uint64_t block_address,
-                   uint64_t num_blocks_to_set,
+                   uint64_t total_bits,
+                   uint64_t bit_address,
+                   uint64_t num_bits_to_set,
                    int clear_or_set);
 
 
-/* count how many contiguous 0 or 1 do we have in the blockmap pointed by 
- * bm, which has a size of total_blocks bits. The count starts in 
- * block_address, until num_blocks_to_find bits is reached. 
+/* count how many contiguous 0 or 1 do we have in the bitmap pointed by 
+ * bm, which has a size of total_bits bits. The count starts in 
+ * bit_address, until num_bits_to_find bits is reached. 
  * clear_or_set is a flag to count contiguous 1s or 0s. */
 int bm_count( unsigned char *bm,
-                   uint64_t total_blocks,
-                   uint64_t block_address,
-                   uint64_t num_blocks_to_count,
+                   uint64_t total_bits,
+                   uint64_t bit_address,
+                   uint64_t num_bits_to_count,
                    int clear_or_set,
                    uint64_t *count_result);
 
-/* find a gap of contiguous zeroed bits in the blockmap pointed by 
- * bm, which has a size of total_blocks bits. We start to look for a gap 
+/* find a gap of contiguous zeroed bits in the bitmap pointed by 
+ * bm, which has a size of total_bits bits. We start to look for a gap 
  * in the address pointed by start, and will stop after count bits were
- * checked or until the total_blocks is reached. The size of the gap in 
+ * checked or until the total_bits is reached. The size of the gap in 
  * bits is specified in gap_size. 
  * If the gap was found, return 0 and set found_adress to the bit offset
  * in the map where the gap is. 
  * If no gap was found, return -1.  */
 int bm_find( unsigned char *bm,
-             uint64_t total_blocks,
+             uint64_t total_bits,
              uint64_t start,
              uint64_t count,
              uint64_t gap_size,
@@ -93,15 +100,15 @@ int bm_find( unsigned char *bm,
 
 
 /* check if a group of contiguous enabled bits can grow into cleared bits
- * without change location in the blockmap pointed by bm, which has a size 
- * of total_blocks bits. start is the start address, which already includes
+ * without change location in the bitmap pointed by bm, which has a size 
+ * of total_bits bits. start is the start address, which already includes
  * some 1s at the beginning. count is the number of bits that we need to 
  * resize. 
  * Will return: 
  * 0: If the extent can grow into trailing zeroes
  * -1 otherwise*/
 int bm_extent_can_grow( unsigned char *bm, 
-                          uint64_t total_blocks, 
+                          uint64_t total_bits, 
                           uint64_t start, 
                           uint64_t count);
 

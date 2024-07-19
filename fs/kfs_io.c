@@ -9,7 +9,7 @@
 #include <ctype.h>
 #include "kfs.h"
 
-sb_t *__sb = NULL;
+sb_t __sb = { 0};
 
 char *trim (char *s){
   /* Initialize start, end pointers */
@@ -551,6 +551,10 @@ int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
     time_t now;
      
     p = pages_alloc( 1);
+    if( p == NULL){
+        TRACE_ERR("Superblock could not be loaded");
+        return( -1);
+    }
 
     rc = block_read( fd, p, 0);
     if( rc < 0){
@@ -574,7 +578,7 @@ int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
     sb->sb_c_time = kfs_sb->sb_c_time;
     sb->sb_m_time = kfs_sb->sb_m_time;
     sb->sb_a_time = kfs_sb->sb_a_time;
-    sb->bdev = fd;
+    sb->sb_bdev = fd;
     
     sb->sb_si_table.capacity = kfs_sb->sb_si_table.capacity;
     sb->sb_si_table.in_use = kfs_sb->sb_si_table.in_use;
@@ -614,7 +618,7 @@ int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
 }
 
 
-int kfs_open( kfs_config_t *config, kfs_descriptor_t *descriptor){
+int kfs_open( kfs_config_t *config){
     int rc, fd; 
     sb_t sb;
 
@@ -638,21 +642,37 @@ int kfs_open( kfs_config_t *config, kfs_descriptor_t *descriptor){
         return( rc);
     }
 
-    memset( (void *) descriptor, 0, sizeof( kfs_descriptor_t));
-    descriptor->config = *config;
-    descriptor->sb = sb;
-    descriptor->fd = fd; 
-
-    __sb = &descriptor->sb;
+    sb.sb_magic = KFS_MAGIC;
+    __sb = sb;
 
 
     return( 0);
 }
 
-void kfs_superblock_display( kfs_descriptor_t *descriptor){
-    sb_t *sb = &descriptor->sb;
+int kfs_active(){
+    sb_t *sb = &__sb;
+
+    if( sb->sb_magic != KFS_MAGIC){
+        return( -1);
+    }
+
+    if( ( sb->sb_flags & KFS_IS_MOUNTED) == 0){
+        return( -1);
+    }
+
+    return(0);
+}
+
+void kfs_superblock_display(){
+    sb_t *sb = &__sb;
     char buff[240];
     extent_t *e;
+
+
+    if( kfs_active() != 0 ){
+        TRACE_ERR("Superblock is not active");
+        return;
+    }
 
     printf("SuperBlock\n");
     printf("KFS Flags: 0x%lx\n", sb->sb_flags);
@@ -728,18 +748,28 @@ void kfs_superblock_display( kfs_descriptor_t *descriptor){
 
 }
 
-int kfs_superblock_update( kfs_descriptor_t *descriptor){
+int kfs_superblock_update(){
     char *p; 
     int rc; 
     kfs_superblock_t *ksb;
     kfs_extent_t *kex;
     extent_t *ex;
     time_t now;
-    sb_t *sb = &descriptor->sb;
-     
-    p = pages_alloc( 1);
+    sb_t *sb = &__sb;
 
-    rc = block_read( descriptor->fd, p, 0);
+    if( kfs_active() != 0 ){
+        TRACE_ERR("Superblock is not active");
+        return( -1);
+    }
+   
+    p = pages_alloc( 1);
+    if( p == NULL){
+        TRACE_ERR("Superblock could not be updated");
+        return( -1);
+    }
+
+
+    rc = block_read( sb->sb_bdev, p, 0);
     if( rc < 0){
         return( rc);
     }
@@ -788,22 +818,26 @@ int kfs_superblock_update( kfs_descriptor_t *descriptor){
     ex_2_kfsex( kex, ex);
 
 
-    block_write( descriptor->fd, p, 0);
+    block_write( sb->sb_bdev, p, 0);
     free( p); 
     return(0);
 }
 
-int kfs_superblock_close( kfs_descriptor_t *descriptor){
-    sb_t *sb = &descriptor->sb;
+int kfs_superblock_close(){
+    sb_t *sb = &__sb;
     int rc;
 
+    if( kfs_active() != 0 ){
+        TRACE_ERR("Superblock is not active");
+        return( -1);
+    }
+ 
     sb->sb_flags = sb->sb_flags &~ KFS_IS_MOUNTED;
-    rc = kfs_superblock_update( descriptor);
+    rc = kfs_superblock_update();
 
-    close( descriptor->fd);
-    memset( descriptor, 0, sizeof( kfs_descriptor_t ));
+    close( sb->sb_bdev);
+    memset( &__sb, 0, sizeof( sb_t ));
 
-    __sb = NULL;
     return(rc);
 }
 
@@ -821,9 +855,339 @@ int kfs_get_edge( sinode_t *sinode, int node_to, kfs_edge_t *edge);
 int kfs_update_edge( kfs_edge_t *edge);
 int kfs_remove_edge( kfs_edge_t *edge);
 
-uint64_t kfs_slot_new();
-int kfs_slot_remove(int slot_id);
-int kfs_slot_get( int slot_id, dict_t *d);
-int kfs_slot_update( int slot_id, dict_t *d);
+int kfs_slot_reserve( uint64_t *slot_id ){
+    char *p;
+    unsigned char *bitmap;
+    uint64_t slotmap_blocks_num, slotmap_block, total_slots;
+    uint64_t slot_block, slots_per_block, slot_offset; 
+    kfs_extent_header_t *ex_header;
+    int rc;
+    sb_t *sb = &__sb;
+    kfs_slot_t *kslot;
+
+
+    if( kfs_active() != 0 ){
+        TRACE_ERR("Superblock is not active");
+        return( -1);
+    }
+    
+    /* check if we have enough room for an extra slot */
+    if( sb->sb_slot_table.in_use > sb->sb_slot_table.capacity ){
+        TRACE_ERR("No more slots available");
+        return( -1);
+    }
+
+    slotmap_block = sb->sb_slot_table.bitmap_extent.ex_block_addr;
+    slotmap_blocks_num = sb->sb_slot_table.bitmap_extent.ex_block_size;
+
+    /* alloc blocks */
+    p = pages_alloc( slotmap_blocks_num);
+    if( p == NULL){
+        TRACE_ERR("Memory for SlotMap could not be reserved");
+        return( -1);
+    }
+
+    /* read extent */
+    rc = extent_read( sb->sb_bdev, p, slotmap_block, slotmap_blocks_num);
+    if( rc == 0){
+        TRACE_ERR("Could not read all, rc=%d", rc);
+        return( -1);
+    }
+
+    ex_header = (kfs_extent_header_t *) p;
+
+    /* verify this is a slot map block */
+    if( ex_header->eh_magic != KFS_SLOTS_BITMAP_MAGIC){
+        TRACE_ERR("Not a slot map block");
+        return( -1);
+    }
+
+    /* double check the map has enough room for an extra slot, but
+     * now we check in the map extent */
+    if( ex_header->eh_entries_in_use > ex_header->eh_entries_capacity ){
+        TRACE_ERR("No more slots available");
+        return( -1);
+    }
+
+    total_slots = sb->sb_slot_table.capacity; 
+/*    ex_header->eh_entries_in_use = 0;
+    ex_header->eh_entries_capacity = bc->out_slots_num;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;*/
+ 
+    bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
+    rc = bm_find( bitmap, 
+                  total_slots, 
+                  0,
+                  total_slots,
+                  1,
+                  slot_id);
+
+
+    if( rc != 0){
+        TRACE_ERR("A slot could not be found in the map");
+        return( -1);
+    }
+
+    /* mark the slot as busy */
+    rc = bm_set_bit( bitmap, total_slots, *slot_id, 1);
+
+    /* update superblock data */
+    sb->sb_slot_table.in_use++;
+
+    /* update slot map header */
+    ex_header->eh_entries_in_use = sb->sb_slot_table.in_use;
+
+    /* write extent */
+    rc = extent_write( sb->sb_bdev, p, slotmap_block, slotmap_blocks_num);
+    if( rc == 0){
+        TRACE_ERR("Could not write, rc=%d", rc);
+        return( -1);
+    }
+
+    free( p);
+
+
+    /* next, update slot and mark it as used */
+    slots_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) / 
+                      sizeof( kfs_slot_t);
+
+    
+    slot_offset = 0;
+    slot_block = ( *slot_id * slots_per_block);
+    if( slot_block == 0){
+        slot_offset = sizeof( kfs_extent_t);
+    }
+
+    if( slot_block > sb->sb_si_table.table_extent.ex_block_size){
+        TRACE_ERR( "slot block is outside the slots table. ");
+        TRACE_ERR( "slot=[%lu, 0x%lx], slot_block=[%lu, 0x%lx]", 
+                   *slot_id, *slot_id,
+                    slot_block, slot_block);
+        return( -1);
+    }
+
+    slot_block += sb->sb_si_table.table_extent.ex_block_addr;
+
+    p = pages_alloc( 1);
+    if( p == NULL){
+        TRACE_ERR("Memory for SlotMap could not be reserved");
+        return( -1);
+    }
+
+
+    rc = block_read( sb->sb_bdev, p, slot_block);
+    if( rc == 0){
+        TRACE_ERR("Could not read page, rc=%d", rc);
+        return( -1);
+    }
+
+    kslot = ( kfs_slot_t *) p + (( *slot_id % KFS_BLOCKSIZE) + slot_offset);
+    if( kslot->slot_id == *slot_id){
+        TRACE_ERR("Could not find slot. ");
+        TRACE_ERR("slot_id=[%lu, 0x%lx], got: [%lu, 0x%lx]",
+                  *slot_id, *slot_id,
+                   kslot->slot_id, kslot->slot_id);
+
+        return( -1);
+    }
+
+
+    kslot->slot_flags |= SLOT_IN_USE;
+
+    rc = block_write( sb->sb_bdev, p, slot_block);
+    if( rc == 0){
+        TRACE_ERR("Could not write page, rc=%d", rc);
+        return( -1);
+    }
+
+    /* and update the slot index */
+    rc = block_read( sb->sb_bdev, p, 
+                     sb->sb_si_table.table_extent.ex_block_addr);
+    if( rc == 0){
+        TRACE_ERR("Could not read page, rc=%d", rc);
+        return( -1);
+    }
+
+    ex_header = (kfs_extent_header_t *) p;
+
+    /* verify this is a slot table block */
+    if( ex_header->eh_magic != KFS_SLOTS_TABLE_MAGIC){
+        TRACE_ERR("Not a slot table block");
+        return( -1);
+    }
+
+    ex_header->eh_entries_in_use = sb->sb_slot_table.in_use;
+    /* and update the slot index */
+    rc = block_write( sb->sb_bdev, p, 
+                      sb->sb_si_table.table_extent.ex_block_addr);
+    if( rc == 0){
+        TRACE_ERR("Could not write page, rc=%d", rc);
+        return( -1);
+    }
+
+    free(p);
+    return(0);
+}
+
+int kfs_slot_remove(uint64_t slot_id){
+    char *p;
+    unsigned char *bitmap;
+    uint64_t slotmap_blocks_num, slotmap_block, total_slots;
+    uint64_t slot_block, slots_per_block, slot_offset; 
+    kfs_extent_header_t *ex_header;
+    int rc;
+    sb_t *sb = &__sb;
+    kfs_slot_t *kslot;
+
+
+    if( kfs_active() != 0 ){
+        TRACE_ERR("Superblock is not active");
+        return( -1);
+    }
+    
+    /* check if we have enough room for an extra slot */
+    if( slot_id > sb->sb_slot_table.capacity ){
+        TRACE_ERR( "Wrong slot id beyond capacity. ");
+        TRACE_ERR( "slot_id=[%lu, 0x%lx]",
+                    slot_id, slot_id);
+        return( -1);
+    }
+
+    slotmap_block = sb->sb_slot_table.bitmap_extent.ex_block_addr;
+    slotmap_blocks_num = sb->sb_slot_table.bitmap_extent.ex_block_size;
+
+    /* alloc blocks */
+    p = pages_alloc( slotmap_blocks_num);
+    if( p == NULL){
+        TRACE_ERR("Memory for SlotMap could not be reserved");
+        return( -1);
+    }
+
+    /* read extent */
+    rc = extent_read( sb->sb_bdev, p, slotmap_block, slotmap_blocks_num);
+    if( rc == 0){
+        TRACE_ERR("Could not read all, rc=%d", rc);
+        return( -1);
+    }
+
+    ex_header = (kfs_extent_header_t *) p;
+
+    /* verify this is a slot map block */
+    if( ex_header->eh_magic != KFS_SLOTS_BITMAP_MAGIC){
+        TRACE_ERR("Not a slot map block");
+        return( -1);
+    }
+
+    total_slots = sb->sb_slot_table.capacity; 
+/*    ex_header->eh_entries_in_use = 0;
+    ex_header->eh_entries_capacity = bc->out_slots_num;
+    ex_header->eh_flags = KFS_ENTRIES_ROOT|KFS_ENTRIES_LEAF;*/
+ 
+    bitmap = (unsigned char *) p + sizeof( kfs_extent_header_t);
+
+    /* clean the slot  */
+    rc = bm_set_bit( bitmap, total_slots, slot_id, 0);
+
+    /* update superblock data */
+    sb->sb_slot_table.in_use--;
+
+    /* update slot map header */
+    ex_header->eh_entries_in_use = sb->sb_slot_table.in_use;
+
+    /* write extent */
+    rc = extent_write( sb->sb_bdev, p, slotmap_block, slotmap_blocks_num);
+    if( rc == 0){
+        TRACE_ERR("Could not write, rc=%d", rc);
+        return( -1);
+    }
+
+    free( p);
+
+
+    /* next, update slot and mark it as used */
+    slots_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) / 
+                      sizeof( kfs_slot_t);
+
+    
+    slot_offset = 0;
+    slot_block = ( slot_id * slots_per_block);
+    if( slot_block == 0){
+        slot_offset = sizeof( kfs_extent_t);
+    }
+
+    if( slot_block > sb->sb_si_table.table_extent.ex_block_size){
+        TRACE_ERR( "slot block is outside the slots table. ");
+        TRACE_ERR( "slot=[%lu, 0x%lx], slot_block=[%lu, 0x%lx]", 
+                   slot_id, slot_id,
+                   slot_block, slot_block);
+        return( -1);
+    }
+
+    slot_block += sb->sb_si_table.table_extent.ex_block_addr;
+
+    p = pages_alloc( 1);
+    if( p == NULL){
+        TRACE_ERR("Memory for SlotMap could not be reserved");
+        return( -1);
+    }
+
+
+    rc = block_read( sb->sb_bdev, p, slot_block);
+    if( rc == 0){
+        TRACE_ERR("Could not read page, rc=%d", rc);
+        return( -1);
+    }
+
+    kslot = ( kfs_slot_t *) p + (( slot_id % KFS_BLOCKSIZE) + slot_offset);
+    if( kslot->slot_id == slot_id){
+        TRACE_ERR("Could not find slot.");
+        TRACE_ERR("slot_id=[%lu, 0x%lx], got: [%lu, 0x%lx]",
+                   slot_id, slot_id,
+                   kslot->slot_id, kslot->slot_id);
+
+        return( -1);
+    }
+
+
+    kslot->slot_flags = 0;
+
+    rc = block_write( sb->sb_bdev, p, slot_block);
+    if( rc == 0){
+        TRACE_ERR("Could not write page, rc=%d", rc);
+        return( -1);
+    }
+
+    /* and update the slot index */
+    rc = block_read( sb->sb_bdev, p, 
+                     sb->sb_si_table.table_extent.ex_block_addr);
+    if( rc == 0){
+        TRACE_ERR("Could not read page, rc=%d", rc);
+        return( -1);
+    }
+
+    ex_header = (kfs_extent_header_t *) p;
+
+    /* verify this is a slot table block */
+    if( ex_header->eh_magic != KFS_SLOTS_TABLE_MAGIC){
+        TRACE_ERR("Not a slot table block");
+        return( -1);
+    }
+
+    ex_header->eh_entries_in_use = sb->sb_slot_table.in_use;
+    /* and update the slot index */
+    rc = block_write( sb->sb_bdev, p, 
+                      sb->sb_si_table.table_extent.ex_block_addr);
+    if( rc == 0){
+        TRACE_ERR("Could not write page, rc=%d", rc);
+        return( -1);
+    }
+
+    free(p);
+    return(0);
+
+}
+
+int kfs_slot_get( uint64_t slot_id, dict_t *d);
+int kfs_slot_update( uint64_t slot_id, dict_t *d);
 
 

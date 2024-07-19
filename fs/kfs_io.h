@@ -16,13 +16,6 @@ typedef struct{
     int sock_buffer_size; 
 }kfs_config_t; 
 
-typedef struct{
-    kfs_config_t config;
-    sb_t sb;
-    int fd; 
-}kfs_descriptor_t; 
-
-
 char *trim (char *s);
 uint64_t get_bd_size( char *fname);
 int create_file( char *fname);
@@ -40,10 +33,17 @@ void kfs_config_display( kfs_config_t *conf);
 
 int kfs_verify( char *filename, int verbose, int extra_verification);
 
-int kfs_open( kfs_config_t *config, kfs_descriptor_t *descriptor);
-void kfs_superblock_display( kfs_descriptor_t *descriptor);
-int kfs_superblock_update( kfs_descriptor_t *descriptor);
-int kfs_superblock_close( kfs_descriptor_t *descriptor);
+int kfs_open( kfs_config_t *config);
+void kfs_superblock_display();
+int kfs_superblock_update();
+int kfs_superblock_close();
+
+
+
+int kfs_slot_new(uint64_t *slot_id);
+int kfs_slot_remove(uint64_t slot_id);
+int kfs_slot_get( uint64_t slot_id, dict_t *d);
+int kfs_slot_update( uint64_t slot_id, dict_t *d);
 
 #endif
 

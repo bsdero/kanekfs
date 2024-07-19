@@ -148,7 +148,7 @@ int term_detach(){
 }
 
 
-int kfs_server_init( kfs_config_t *config, kfs_descriptor_t *descriptor){
+int kfs_server_init( kfs_config_t *config){
     int ret = 0;
     int server_socket, data_socket;
     struct sockaddr_un sockn;
@@ -241,7 +241,6 @@ int main( int argc, char **argv){
     int rc;
     options_t options;
     kfs_config_t config;
-    kfs_descriptor_t descriptor; 
 
     rc = parse_opts( argc, argv, &options);
     if( rc < 0){
@@ -256,7 +255,7 @@ int main( int argc, char **argv){
 
     kfs_config_display( &config);
 
-    rc = kfs_server_init( &config, &descriptor );
+    rc = kfs_server_init( &config );
     if( rc < 0){
         return( rc);
     }

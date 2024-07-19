@@ -25,7 +25,9 @@ char *tests[]={
     "FindGap in Bitmap #1", 
     "FindGap in Bitmap #2", 
     "GrowExtent in Bitmap #1", 
-    "GrowExtent in Bitmap #2" 
+    "GrowExtent in Bitmap #2", 
+    "GetBits in byte #1",
+    "GetBits in Bitmap #1",
 };
 
 
@@ -34,7 +36,7 @@ char *tests[]={
 #define PASSED                                     0
 
 
-int global_results[50];
+int global_results[TESTS_NUM];
 int verbose_mode = 1;
 
 
@@ -1146,6 +1148,8 @@ int main(){
                        -2, -3, -3, -3 };
 
     int i_rc_20[15];
+    int overall = 0;
+
     if( verbose_mode == 1){
         printf("Test #%d: %s\n", test_id, tests[test_id]);
     }
@@ -1182,12 +1186,88 @@ int main(){
     show_test_results( test_id, i_rc_20, i_erc_20, 12, 4);
     test_id++;
 
-    printf("Resume: \n");
-    for( i = 0; i < test_id; i++){
-        printf("Test #%d, %s : %s\n", i, tests[i], 
-            ( global_results[i] ? "FAIL" : "PASSED" ));
+    /*****************************************************************
+     * TESTS ADDED FOR GET BIT STATUS
+     * TEST #20
+     * GetBits in byte #1 
+     */
+    int e_results_11[8] = { 1, 0, 0, 1, 0, 1, 0, 1 };
+    if( verbose_mode == 1){
+        printf("Test #%d: %s\n", test_id, tests[test_id]);
     }
-    printf("\n");
+
+
+    bresult[0] = byte_get_bit( 0x09, 0);
+    bresult[1] = byte_get_bit( 0x09, 1);
+    bresult[2] = byte_get_bit( 0x09, 2);
+    bresult[3] = byte_get_bit( 0x09, 3);
+    bresult[4] = byte_get_bit( 0xaa, 0);
+    bresult[5] = byte_get_bit( 0xaa, 1);
+    bresult[6] = byte_get_bit( 0xaa, 6);
+    bresult[7] = byte_get_bit( 0xff, 7);
+
+    for( i = 0; i < 8; i++){
+        a_results[i] = (int) bresult[i];
+    }
+
+    show_test_results( test_id, a_results, e_results_11, 8, 0);
+    test_id++;
+ 
+    /*********************************************************************
+     * TEST #21
+     * Get bit in bitmap #1
+     */
+    /* expected bitmap */
+    unsigned char m_21[] =      { 0xf1, 0x55, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0x82,
+                                  0x00, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0x0f};
+                                  
+    /* bit locations */                              
+    int bl_21[] =                {    0,    1,    3,    4,  
+                                      7,    8,    9,   10,
+                                     11,   12,   13,   14,
+                                     15,   16,  123,  124};
+
+    /* store expected bit status  */
+    int ebs_21[] =               {    1,    0,    0,    1, 
+                                      1,    1,    0,    1,
+                                      0,    1,    0,    1,
+                                      0,    0,    1,    0};
+
+    int rs_21[16];
+
+    if( verbose_mode == 1){
+        printf("Test #%d: %s\n", test_id, tests[test_id]);
+    }
+
+    for( i = 0; i < 16; i++){
+        rs_21[i] = bm_get_bit( m_21, 128, bl_21[i]);
+    }
+
+    show_test_results( test_id, rs_21, ebs_21, 16, 0);
+    test_id++;
+
+
+    /******************************************************************
+     * GLOBAL RESULTS 
+     */
+    printf("GLOBAL RESULTS\n");
+    printf("Test #, Test Name, Result, NumResult ( success=0)\n");
+    for( i = 0; i < test_id; i++){
+        printf("%d, %s, %s, %d\n", 
+                i, tests[i], 
+                ( global_results[i] ? "FAIL" : "PASSED" ),
+                global_results[i] );
+        overall += global_results[i];
+    }
+
+    overall = (overall != 0 ) ? 1 : 0;
+    printf( "\nOVERALL RESULTS\n");
+    printf( "%s, %d\n",
+            overall ? "FAIL" : "PASSED", 
+            overall);
+
     return(0);
 }
 

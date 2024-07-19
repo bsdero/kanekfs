@@ -118,7 +118,6 @@ int main( int argc, char **argv){
     int rc;
     options_t options;
     kfs_config_t config;
-    kfs_descriptor_t descriptor; 
 
     rc = parse_opts( argc, argv, &options);
     if( rc < 0){
@@ -133,14 +132,14 @@ int main( int argc, char **argv){
 
     kfs_config_display( &config);
 
-    rc = kfs_open( &config, &descriptor);
+    rc = kfs_open( &config);
     if( rc < 0) goto quit;
 
-    kfs_superblock_display( &descriptor);
-    rc = kfs_superblock_update( &descriptor);
+    kfs_superblock_display();
+    rc = kfs_superblock_update();
     if( rc < 0) goto quit;
 
-    rc = kfs_superblock_close( &descriptor);
+    rc = kfs_superblock_close();
     if( rc < 0) goto quit;
 
 quit:;

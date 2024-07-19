@@ -32,6 +32,16 @@ unsigned char byte_set_bits( int start,
     return( byte); 
 }
 
+
+/* get bit status in a byte */
+int byte_get_bit( unsigned char byte, int bit){
+    int rc;
+
+    rc = byte & (1 << bit);
+    return( ( rc == 0) ? 0 : 1);
+}
+
+
 /* count how many contiguous bits has the byte passed as argument,
  * starting in the startbit, counting max of numbits. clear_or_set
  * specifies if we are looking for contiguous 0s or 1s. Will return
@@ -111,12 +121,12 @@ int byte_find_gap( int start, int numbits, char byte, int *count){
 
 
 
-/* set one bit in the blockmap pointed by bm, which has total_blocks bits. 
- * block_address is the bit to change and clear_or_set is a flag to set
+/* set one bit in the bitmap pointed by bm, which has total_bits bits. 
+ * bit_address is the bit to change and clear_or_set is a flag to set
  * or clear the bit. */
 int bm_set_bit( unsigned char *bm,
-                uint64_t total_blocks,
-                uint64_t block_address, 
+                uint64_t total_bits,
+                uint64_t bit_address, 
                 int clear_or_set){
 
     /* do the math for know which byte in the map should we update */
@@ -124,15 +134,15 @@ int bm_set_bit( unsigned char *bm,
     uint8_t bit_to_change;
     uint8_t byte; 
 
-    if( block_address >= total_blocks){
+    if( bit_address >= total_bits){
         return( -1);
     }
 
     /* get byte index in the map */
-    location_in_map = block_address / 8;
+    location_in_map = bit_address / 8;
 
     /* get which bit to update */
-    bit_to_change = block_address % 8;
+    bit_to_change = bit_address % 8;
 
     /* get the byte from the map */ 
     byte = bm[location_in_map];
@@ -145,41 +155,69 @@ int bm_set_bit( unsigned char *bm,
     return(0);
 }
 
+/* get bit status in a bitmap */
+int bm_get_bit( unsigned char *bm, 
+                uint64_t total_bits, 
+                uint64_t bit_address){
 
+    /* do the math for know which byte in the map should we update */
+    uint64_t location_in_map;
+    uint8_t bit_to_read;
+    uint8_t byte; 
+    int rc;
 
-/* set a group of continuous bits in the blockmap pointed by bm, which has 
- * total_blocks bits. block_address is the start of the contiguous bits 
+    if( bit_address >= total_bits){
+        return( -1);
+    }
+
+    /* get byte index in the map */
+    location_in_map = bit_address / 8;
+
+    /* get which bit to read */
+    bit_to_read = bit_address % 8;
+
+    /* get the byte from the map */ 
+    byte = bm[location_in_map];
+
+    /* get bit status */
+    rc = byte_get_bit( byte, (int) bit_to_read);
+    
+    return(rc);
+}
+
+/* set a group of continuous bits in the bitmap pointed by bm, which has 
+ * total_bits bits. bit_address is the start of the contiguous bits 
  * extent to update and clear_or_set is a flag to set or clear the bits. */
 int bm_set_extent( unsigned char *bm,
-                   uint64_t total_blocks,
-                   uint64_t block_address,
-                   uint64_t num_blocks_to_set,
+                   uint64_t total_bits,
+                   uint64_t bit_address,
+                   uint64_t num_bits_to_set,
                    int clear_or_set){
 
     uint64_t location_in_map;
     uint8_t byte, bytes_in_map;
-    uint64_t pending_blocks = 0;
+    uint64_t pending_bits = 0;
     uint64_t bits_to_mark_at_start;
     uint64_t bytes_to_mark;
     uint64_t extra_bits_to_mark;
     int aligned_to_byte;
 
-    if( (block_address > total_blocks) ||
-        (block_address + num_blocks_to_set) > total_blocks) {
+    if( (bit_address > total_bits) ||
+        (bit_address + num_bits_to_set) > total_bits) {
         return( -1);
     }
 
-    /* if only need to mark one block, call bm_set_bit */
-    if( num_blocks_to_set == 1){
-        return( bm_set_bit( bm, total_blocks, block_address, clear_or_set));
+    /* if only need to mark one bit, call bm_set_bit */
+    if( num_bits_to_set == 1){
+        return( bm_set_bit( bm, total_bits, bit_address, clear_or_set));
     }
 
 
-    location_in_map = block_address / 8;
-    pending_blocks = num_blocks_to_set;
+    location_in_map = bit_address / 8;
+    pending_bits = num_bits_to_set;
     
-    /* get if the block address is byte aligned */ 
-    aligned_to_byte = block_address & 0x07;
+    /* get if the bit address is byte aligned */ 
+    aligned_to_byte = bit_address & 0x07;
 
     /* not aligned, process the first byte accordingly */
     if( aligned_to_byte != 0 ){
@@ -188,12 +226,12 @@ int bm_set_extent( unsigned char *bm,
         byte = bm[location_in_map];
 
 	/* calc hoy many bits we need to update for the first byte. If 
-	 * num_block_to_mark is biggest than 7 and the min
+	 * num_bit_to_mark is biggest than 7 and the min
 	 * number of bits is 7, we don't care because the value will be 
 	 * fixed in the byte_set_bits() function.  */
         
-        if( (aligned_to_byte + num_blocks_to_set) < 8){
-            bits_to_mark_at_start = num_blocks_to_set; 
+        if( (aligned_to_byte + num_bits_to_set) < 8){
+            bits_to_mark_at_start = num_bits_to_set; 
         }else{
             bits_to_mark_at_start = 8 - aligned_to_byte;
         } 
@@ -207,20 +245,20 @@ int bm_set_extent( unsigned char *bm,
 	/* store in the map */
         bm[location_in_map] = byte;
 
-	/* now we have lesser pending blocks */
-        pending_blocks -= bits_to_mark_at_start;
+	/* now we have lesser pending bits */
+        pending_bits -= bits_to_mark_at_start;
 
 	/* process the next byte */
         location_in_map++;
 
 	/* possibly we are done. If that's the case, just quit */
-        if( pending_blocks == 0){
+        if( pending_bits == 0){
             return(0);
         }
     }
 
     /* now get how many bytes we need to update */
-    bytes_to_mark = pending_blocks / 8;
+    bytes_to_mark = pending_bits / 8;
 
     /* if we got 1 or more full bytes */
     if( bytes_to_mark >= 1){
@@ -232,8 +270,8 @@ int bm_set_extent( unsigned char *bm,
 	/* update the bytes */
         memset( &bm[location_in_map], bytes_in_map, bytes_to_mark);
         location_in_map += bytes_to_mark;
-        pending_blocks -= (bytes_to_mark * 8);
-        if( pending_blocks == 0){
+        pending_bits -= (bytes_to_mark * 8);
+        if( pending_bits == 0){
             return(0);
         }
     }
@@ -241,55 +279,55 @@ int bm_set_extent( unsigned char *bm,
 
     /* if we re here, that means we have lesser than 8 bits to update in 
      * the bitmap. */
-    extra_bits_to_mark = pending_blocks % 8;
+    extra_bits_to_mark = pending_bits % 8;
 
     if( extra_bits_to_mark > 1){
         byte = bm[location_in_map];
 	byte = byte_set_bits( 0, extra_bits_to_mark, byte, clear_or_set);
         bm[location_in_map] = byte;
-        pending_blocks -= extra_bits_to_mark;
-        if( pending_blocks == 0){
+        pending_bits -= extra_bits_to_mark;
+        if( pending_bits == 0){
             return(0);
         }
     }
     return(-2);
 }
 
-/* count how many contiguous 0 or 1 do we have in the blockmap pointed by
- * bm, which has a size of total_blocks bits. The count starts in
- * block_address, until num_blocks_to_count bits is reached.
+/* count how many contiguous 0 or 1 do we have in the bitmap pointed by
+ * bm, which has a size of total_bits bits. The count starts in
+ * bit_address, until num_bits_to_count bits is reached.
  * clear_or_set is a flag to count contiguous 1s or 0s. 
  * Return: 
  *        0 always, except error. 
  */
 
 int bm_count( unsigned char *bm,
-                   uint64_t total_blocks, 
-                   uint64_t block_address,
-                   uint64_t num_blocks_to_count, 
+                   uint64_t total_bits, 
+                   uint64_t bit_address,
+                   uint64_t num_bits_to_count, 
                    int clear_or_set, 
                    uint64_t *count_result){
 
     uint64_t location_in_map;
     uint8_t byte;
     uint64_t bits_count = 0; 
-    int64_t pending_bits = num_blocks_to_count;
+    int64_t pending_bits = num_bits_to_count;
     int expected_bits = 0;
     int aligned_to_byte;
 
     *count_result = 0;
 
 
-    if( (block_address >= total_blocks) ||
-        (block_address + num_blocks_to_count) > total_blocks) {
+    if( (bit_address >= total_bits) ||
+        (bit_address + num_bits_to_count) > total_bits) {
         return( -1);
     }
  
     bits_count = 0;
-    location_in_map = block_address / 8;
+    location_in_map = bit_address / 8;
 
-    /* get if the block address is byte aligned */
-    aligned_to_byte = block_address & 0x07;
+    /* get if the bit address is byte aligned */
+    aligned_to_byte = bit_address & 0x07;
 
     /* bit not aligned to byte start */ 
     if( aligned_to_byte != 0){
@@ -297,10 +335,10 @@ int bm_count( unsigned char *bm,
         byte = bm[location_in_map++];
 
 
-        if( (aligned_to_byte + num_blocks_to_count) >= 8){
+        if( (aligned_to_byte + num_bits_to_count) >= 8){
             expected_bits = 8 - aligned_to_byte;
         }else{
-            expected_bits = num_blocks_to_count;
+            expected_bits = num_bits_to_count;
         }
 
         bits_count = byte_count_bits( (int) aligned_to_byte, 
@@ -318,7 +356,7 @@ int bm_count( unsigned char *bm,
     }
 
 
-    while( bits_count < num_blocks_to_count){
+    while( bits_count < num_bits_to_count){
         byte = bm[location_in_map++];
 
         if( byte != 0xff && byte != 0x00 ){
@@ -336,7 +374,7 @@ int bm_count( unsigned char *bm,
 
 
                 if( pending_bits <= 8){
-                    *count_result = num_blocks_to_count;
+                    *count_result = num_bits_to_count;
                     return( 0);
                 }
                 bits_count += 8;
@@ -351,30 +389,30 @@ int bm_count( unsigned char *bm,
     return( -2);
 }
 
-/* find a gap of contiguous zeroed bits in the blockmap pointed by
- * bm, which has a size of total_blocks bits. We start to look for a gap
+/* find a gap of contiguous zeroed bits in the bitmap pointed by
+ * bm, which has a size of total_bits bits. We start to look for a gap
  * in the address pointed by start, and will stop after count bits were
- * checked or until the total_blocks is reached. The size of the gap in
+ * checked or until the total_bits is reached. The size of the gap in
  * bits is specified in gap_size.
  * If the gap was found, return 0 and set found_adress to the bit offset
  * in the map where the gap is.
  * If no gap was found, return -1.  */
 int bm_find( unsigned char *bm,
-             uint64_t total_blocks,
-             uint64_t block_address,
+             uint64_t total_bits,
+             uint64_t bit_address,
              uint64_t count,
              uint64_t gap_size,
              uint64_t *found_address){
 
-    uint64_t location_in_map = block_address / 8;
+    uint64_t location_in_map = bit_address / 8;
     uint64_t bit_offset, updated_gap_size; 
     uint8_t byte; 
     int rc, bit_count; 
-    int aligned_to_byte = block_address & 0x07;
+    int aligned_to_byte = bit_address & 0x07;
     int may_have_a_large_gap = 0;
 
 
-    if( ( block_address >= total_blocks) || 
+    if( ( bit_address >= total_bits) || 
         ( gap_size == 0)                 || 
         ( count == 0)                    ||
         ( gap_size > count)){ 
@@ -382,8 +420,8 @@ int bm_find( unsigned char *bm,
         return( -1);
     }
 
-    if( (block_address + count) > total_blocks){
-        count = total_blocks - block_address;
+    if( (bit_address + count) > total_bits){
+        count = total_bits - bit_address;
     }
 
     updated_gap_size = gap_size;
@@ -440,16 +478,16 @@ int bm_find( unsigned char *bm,
 
 
 /* check if a group of contiguous enabled bits can grow into cleared bits
- * without change location in the blockmap pointed by bm, which has a size
- * of total_blocks bits. start is the start address, which already includes
+ * without change location in the bitmap pointed by bm, which has a size
+ * of total_bits bits. start is the start address, which already includes
  * some 1s at the beginning. count is the number of bits that we need to
  * resize.
  * Will return:
  * 0: If the extent can grow into trailing zeroes
  * -1 otherwise*/
 int bm_extent_can_grow( unsigned char *bm,
-                          uint64_t total_blocks,
-                          uint64_t block_address,
+                          uint64_t total_bits,
+                          uint64_t bit_address,
                           uint64_t count){
 
 
@@ -457,8 +495,8 @@ int bm_extent_can_grow( unsigned char *bm,
     uint64_t count_result; 
     uint64_t ones, expected_zeroes; 
 
-    if( (  block_address >= total_blocks)         ||
-        (( block_address + count) > total_blocks) ||
+    if( (  bit_address >= total_bits)         ||
+        (( bit_address + count) > total_bits) ||
         (  count == 0) ){
 
         /* return -1 when the arguments are not valid */
@@ -466,7 +504,7 @@ int bm_extent_can_grow( unsigned char *bm,
     }
 
     /* cover the cases where the map chunk start with 0s. */
-    rc = bm_count( bm, total_blocks, block_address, count, 0, &count_result);
+    rc = bm_count( bm, total_bits, bit_address, count, 0, &count_result);
     if( rc != 0){
 
         /* return -100 when something weird happened in bm_count() */
@@ -490,7 +528,7 @@ int bm_extent_can_grow( unsigned char *bm,
     }
 
     /* count_result == 0 here, and that means we are starting with 1s */
-    rc = bm_count( bm, total_blocks, block_address, count, 1, &count_result);
+    rc = bm_count( bm, total_bits, bit_address, count, 1, &count_result);
 
     if( rc != 0){
 
@@ -518,7 +556,7 @@ int bm_extent_can_grow( unsigned char *bm,
     expected_zeroes = count - ones;
 
     /* do the count */
-    rc = bm_count( bm, total_blocks, block_address+ones, expected_zeroes, 0, 
+    rc = bm_count( bm, total_bits, bit_address+ones, expected_zeroes, 0, 
                    &count_result);
 
     if( rc != 0){

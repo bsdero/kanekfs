@@ -62,44 +62,6 @@ typedef struct{
     extent_t slot_extent;
 }slot_t;
 
-#define KFS_CACHE_ACTIVE         0x0001 /* is this element in cache? */
-#define KFS_CACHE_DIRTY          0x0002 /* dirty? should we sync? */
-#define KFS_CACHE_EVICT          0x0004 /* remove and free memory */
-#define KFS_CACHE_PINNED         0x0008 /* dont remove this from cache */
-#define KFS_CACHE_FLUSH          0x0010 /* flush to block dev */
-
-#define KFS_CACHE_MASK           0x00ff 
-
-typedef struct{
-    void *ce_ptr;
-
-    int ce_flags;
-    time_t ce_u_time;
-    uint64_t ce_addr;           /* block mapped */
-    int ce_num_blocks; /* num of blocks */
-}cache_element_t;
-
-
-#define KFS_CACHE_MAX_ELEMENTS   32
-/* generic cache structure */
-typedef struct{
-    /* pointer to the elements array */
-    void *ca_elements;
-
-    /* number of elements in use and total */
-    uint32_t ca_elements_in_use;
-    uint32_t ca_elements_capacity;
-
-    /* last update time */
-    time_t ca_u_time;
-
-#define KFS_CACHE_DT_LIST        0x01
-#define KFS_CACHE_DT_BUF         0x02
-    uint16_t ca_flags;
-}cache_t;
-
-
-
 typedef struct{
     uint64_t ed_sinode; /* which node is this edge pointing to */
     char *ed_name;

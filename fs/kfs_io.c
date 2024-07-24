@@ -855,6 +855,8 @@ int kfs_get_edge( sinode_t *sinode, int node_to, kfs_edge_t *edge);
 int kfs_update_edge( kfs_edge_t *edge);
 int kfs_remove_edge( kfs_edge_t *edge);
 
+
+
 int kfs_slot_reserve( uint64_t *slot_id ){
     char *p;
     unsigned char *bitmap;
@@ -1186,8 +1188,5 @@ int kfs_slot_remove(uint64_t slot_id){
     return(0);
 
 }
-
-int kfs_slot_get( uint64_t slot_id, dict_t *d);
-int kfs_slot_update( uint64_t slot_id, dict_t *d);
 
 

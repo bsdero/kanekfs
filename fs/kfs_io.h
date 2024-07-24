@@ -39,11 +39,14 @@ int kfs_superblock_update();
 int kfs_superblock_close();
 
 
+int kfs_slot_set_flags( slot_t *slot, uint64_t flags);
+int kfs_slot_set_owners( slot_t *slot, uint64_t sinode, uint64_t edge);
 
-int kfs_slot_new(uint64_t *slot_id);
-int kfs_slot_remove(uint64_t slot_id);
-int kfs_slot_get( uint64_t slot_id, dict_t *d);
-int kfs_slot_update( uint64_t slot_id, dict_t *d);
+int kfs_slot_get( slot_t *slot);
+int kfs_slot_open( slot_t *slot, uint64_t slot_id);
+int kfs_slot_close( slot_t *slot);
+int kfs_slot_read( slot_t *slot);
+int kfs_slot_update( slot_t *slot);
 
 #endif
 

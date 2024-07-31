@@ -1,7 +1,8 @@
 #ifndef _KFS_CACHE_H_
 #define _KFS_CACHE_H_
 
-
+#include <pthread.h>
+#include "trace.h"
 
 #define KFS_CACHE_ACTIVE         0x0001 /* is this element in cache? */
 #define KFS_CACHE_DIRTY          0x0002 /* dirty? should we sync? */
@@ -13,11 +14,13 @@
 
 typedef struct{
     void *ce_ptr;
-
+    uint64_t u_ref; /* reference, may be a pointer */
     int ce_flags;
     time_t ce_u_time;
     uint64_t ce_addr;           /* block mapped */
     int ce_num_blocks; /* num of blocks */
+    pthread_mutex_t ce_lock;
+    void (*on_unmap_callback)(cache_element_t *);
 }cache_element_t;
 
 
@@ -30,20 +33,34 @@ typedef struct{
     uint32_t ca_elements_in_use;
     uint32_t ca_elements_capacity;
 
-    /* last update time */
-    time_t ca_u_time;
 
-#define KFS_CACHE_DT_LIST        0x01
-#define KFS_CACHE_DT_BUF         0x02
+#define KFS_CACHE_IS_READY               0x01 /* read flag. If enabled,
+                                                 the cache is ready for run */
+#define KFS_CACHE_IS_ACTIVE              0x02 /* read flag. if enabled, 
+                                               * processing loop may run any 
+                                               * time */
+#define KFS_CACHE_ON_LOOP                0x04 /* read flag, if enabled 
+                                               * the processing loop is 
+                                               * running */
+#define KFS_CACHE_FLUSH                  0x08 /* set this for flush all the
+                                                 buffer in cache */
+#define KFS_CACHE_PAUSE_LOOP             0x10 /* set this for pause the loop,
+                                                 clear it for un pause */
+
+#define KFS_CACHE_EXITLOOP               0x20 /* set this for exit the loop */
+    pthread_mutex_t ca_lock; 
     uint16_t ca_flags;
+    int ca_nanosec;   /* sleep for N nanosecs */
     int ca_fd;
+    pthread_t ca_thread; /* thread */
 }cache_t;
 
 
-int kfs_cache_init( cache_t *cache, int fd, int num_elems);
+int kfs_cache_alloc( cache_t *cache, int fd, int num_elems, int nanosec);
 int kfs_cache_destroy( cache_t *cache);
 cache_element_t *kfs_cache_map( cache_t *cache, uint32_t addr);
 int kfs_cache_unmap( cache_t *cache, cache_element_t *cache);
+int kfs_cache_process( cache_t *cache, int *num_completed_ops);
 
 #endif
 

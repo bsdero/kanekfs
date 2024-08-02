@@ -4,20 +4,19 @@
 #include <pthread.h>
 #include "trace.h"
 
-#define KFS_CACHE_ACTIVE         0x0001 /* is this element in cache? */
+#define KFS_CACHE_ACTIVE         0x0001 /* has this element valid data? */
 #define KFS_CACHE_DIRTY          0x0002 /* dirty? should we sync? */
 #define KFS_CACHE_EVICT          0x0004 /* remove and free memory */
 #define KFS_CACHE_PINNED         0x0008 /* dont remove this from cache */
-#define KFS_CACHE_FLUSH          0x0010 /* flush to block dev */
 
 #define KFS_CACHE_MASK           0x00ff 
 
 typedef struct{
-    void *ce_ptr;
+    void *ce_mem_ptr;   /* ptr to memory */
     uint64_t u_ref; /* reference, may be a pointer */
-    int ce_flags;
+    uint64_t ce_flags;
     time_t ce_u_time;
-    uint64_t ce_addr;           /* block mapped */
+    uint64_t ce_bdev_addr;           /* block mapped */
     int ce_num_blocks; /* num of blocks */
     pthread_mutex_t ce_lock;
     void (*on_unmap_callback)(cache_element_t *);
@@ -43,7 +42,7 @@ typedef struct{
                                                * the processing loop is 
                                                * running */
 #define KFS_CACHE_FLUSH                  0x08 /* set this for flush all the
-                                                 buffer in cache */
+                                                 buffers in cache */
 #define KFS_CACHE_PAUSE_LOOP             0x10 /* set this for pause the loop,
                                                  clear it for un pause */
 
@@ -58,9 +57,10 @@ typedef struct{
 
 int kfs_cache_alloc( cache_t *cache, int fd, int num_elems, int nanosec);
 int kfs_cache_destroy( cache_t *cache);
+int kfs_cache_start_thread( cache_t *cache);
+int kfs_cache_stop_thread( cache_t *cache);
 cache_element_t *kfs_cache_map( cache_t *cache, uint32_t addr);
 int kfs_cache_unmap( cache_t *cache, cache_element_t *cache);
-int kfs_cache_process( cache_t *cache, int *num_completed_ops);
 
 #endif
 

@@ -16,6 +16,7 @@
 #include <ctype.h>
 #include "trace.h"
 #include "dict.h"
+#include "kfs_cache.h"
 
 #define KFS_BLOCKSIZE                             8192
 

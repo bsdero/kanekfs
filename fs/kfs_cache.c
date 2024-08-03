@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <stdint.h>
 #include "trace.h"
 #include "kfs_cache.h"
 
@@ -10,10 +11,10 @@ void *kfs_cache_loop_thread( void *cache_p){
     cache_t *cache = ( cache_t *) cache_p;
     struct timespec remaining, request;
     int i, nsec = 200000;
-    cache_element_t *ce; 
-    uint64_t flags; 
+    cache_element_t **ce; 
+    uint32_t flags; 
 
-    cache->ca_flags |= KFS_CACHE_IS_ACTIVE;
+    cache->ca_flags |= KFS_CACHE_ACTIVE;
     request.tv_sec = 0;
     request.tv_nsec = nsec;
 
@@ -29,38 +30,69 @@ void *kfs_cache_loop_thread( void *cache_p){
 
 
         cache->ca_flags |= KFS_CACHE_ON_LOOP;
+        //enable cache mutex here
         for( i = 0; i < cache->ca_elements_capacity; i++){
             ce = cache->ca_elements;
             flags = ce[i]->ce_flags;
-            if((flags & KFS_CACHE_ACTIVE) == 0){
+            if((flags & KFS_CACHE_NODE_ACTIVE) == 0){
                 continue;
             }
 
-            if( (flags & KFS_CACHE_DIRTY) != 0){
+            if( (flags & KFS_CACHE_NODE_DIRTY) != 0){
                 //write block
             }
 
-            if( (flags & KFS_CACHE_EVICT) != 0){
+            if( (flags & KFS_CACHE_NODE_EVICT) != 0){
                 //clear element
             }
         }
-
+        //disable cache mutex
+        //
+        nanosleep( &request, &remaining);
 
 
     }while( (cache->ca_flags & KFS_CACHE_EXIT_LOOP) == 0);
 
 
-    cache->ca_flags &= ~KFS_CACHE_IS_ACTIVE;
+    cache->ca_flags &= ~KFS_CACHE_ACTIVE;
     return( NULL);
 }
 
 
-cache_element_t *kfs_cache_map( cache_t *cache, uint32_t addr){
-    
+cache_element_t *kfs_cache_map( cache_t *cache, 
+                                uint64_t addr, 
+                                int numblocks, 
+                                uint32_t flags,
+                                uint32_t id,
+                                void *(*func)(void *)   ){
+    int i;
+    uint32_t fc;
+    cache_element_t **cel, *el;
+    int found = -1;
+
+    //enable cache mutex here
+    for( i = 0; i < cache->ca_elements_capacity; i++){
+        cel = &cache->ca_elements[i];
+        fc = cel[i]->ce_flags;
+
+        if( fc & KFS_CACHE_NODE_ACTIVE){
+            continue;
+        }
+        found = i;
+        break;
+    }
+
+
+    if( found != 0){
+        el = cel[i];
+        /* reserve mem, fill in, init its mutex */
+    }
+    //disable cache mutex here
+
+    return( el);
 }
 
 int kfs_cache_alloc( cache_t *cache, int fd, int num_elems, int nanosec){
-    cache_element_t *cel;
     void *p;
     memset( (void *) cache, 0, sizeof( cache_t));
 
@@ -83,14 +115,14 @@ int kfs_cache_alloc( cache_t *cache, int fd, int num_elems, int nanosec){
         return(-1); 
     } 
 
-    cache->ca_flags = KFS_CACHE_IS_READY;
+    cache->ca_flags = KFS_CACHE_READY;
     return(0);
 }
 
 int kfs_cache_start_thread( cache_t *cache){
     int rc;
 
-    if( (cache->ca_flags & KFS_CACHE_IS_READY) == 0){
+    if( (cache->ca_flags & KFS_CACHE_READY) == 0){
         TRACE_ERR("cache is not ready, abort");
         return(-1);
     }
@@ -109,8 +141,8 @@ int kfs_cache_start_thread( cache_t *cache){
 
 
 int kfs_cache_destroy( cache_t *cache);
-cache_element_t *kfs_cache_map( cache_t *cache, uint32_t addr);
-int kfs_cache_unmap( cache_t *cache, cache_element_t *cache);
+
+int kfs_cache_unmap( cache_t *cache, cache_element_t *ce);
 
 
 

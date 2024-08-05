@@ -50,7 +50,7 @@ typedef struct{
                                                  clear it for un pause */
 
 #define KFS_CACHE_EXIT_LOOP              0x20 /* set this for exit the loop */
-    pthread_mutex_t ca_lock; 
+    pthread_mutex_t ca_mutex; 
     uint16_t ca_flags;
     int ca_nanosec;   /* sleep for N nanosecs */
     int ca_fd;

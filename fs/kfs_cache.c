@@ -65,12 +65,16 @@ cache_element_t *kfs_cache_map( cache_t *cache,
                                 uint32_t flags,
                                 uint32_t id,
                                 void *(*func)(void *)   ){
-    int i;
+    int i, rc;
     uint32_t fc;
     cache_element_t **cel, *el;
     int found = -1;
+    
 
-    //enable cache mutex here
+    el = NULL;
+
+
+    pthread_mutex_lock( &cache->ca_mutex);
     for( i = 0; i < cache->ca_elements_capacity; i++){
         cel = &cache->ca_elements[i];
         fc = cel[i]->ce_flags;
@@ -85,10 +89,21 @@ cache_element_t *kfs_cache_map( cache_t *cache,
 
     if( found != 0){
         el = cel[i];
+
+        el->ce_mem_ptr = malloc( numblocks * sizeof( KFS_BLOCKSIZE));
+        if( el->ce_mem_ptr == NULL){
+            TRACE_ERR("malloc error");
+            goto exit;
+        }
+
+         rc = extent_read( cache->ca_fd, el->ce_mem_ptr, addr, numblocks );
+
+
         /* reserve mem, fill in, init its mutex */
     }
-    //disable cache mutex here
 
+exit:
+    pthread_mutex_unlock( &cache->ca_mutex);
     return( el);
 }
 
@@ -110,7 +125,7 @@ int kfs_cache_alloc( cache_t *cache, int fd, int num_elems, int nanosec){
     cache->ca_nanosec = nanosec;
     cache->ca_fd = fd;
 
-    if (pthread_mutex_init(&cache->ca_lock, NULL) != 0) { 
+    if (pthread_mutex_init(&cache->ca_mutex, NULL) != 0) { 
         TRACE_ERR("mutex init has failed"); 
         return(-1); 
     } 

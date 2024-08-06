@@ -5,13 +5,13 @@
 #include <stdint.h>
 #include "trace.h"
 #include "kfs_cache.h"
-
+#include "kfs_io.h"
 
 void *kfs_cache_loop_thread( void *cache_p){
     cache_t *cache = ( cache_t *) cache_p;
     struct timespec remaining, request;
-    int i, nsec = 200000;
-    cache_element_t **ce; 
+    int rc, i, nsec = 200000;
+    cache_element_t *el;
     uint32_t flags; 
 
     cache->ca_flags |= KFS_CACHE_ACTIVE;
@@ -28,26 +28,45 @@ void *kfs_cache_loop_thread( void *cache_p){
             continue;
         }
 
-
+        pthread_mutex_lock( &cache->ca_mutex);
         cache->ca_flags |= KFS_CACHE_ON_LOOP;
-        //enable cache mutex here
         for( i = 0; i < cache->ca_elements_capacity; i++){
-            ce = cache->ca_elements;
-            flags = ce[i]->ce_flags;
+            el = cache->ca_elements[i];
+            flags = el->ce_flags;
+
             if((flags & KFS_CACHE_NODE_ACTIVE) == 0){
                 continue;
             }
 
-            if( (flags & KFS_CACHE_NODE_DIRTY) != 0){
-                //write block
+            rc = pthread_mutex_trylock( &el->ce_mutex);
+            if( rc != 0){
+                continue;
             }
 
+            if( (flags & KFS_CACHE_NODE_DIRTY) != 0){
+                rc = extent_write( cache->ca_fd, 
+                                   el->ce_mem_ptr, 
+                                   el->ce_block_addr, 
+                                   el->ce_num_blocks);
+                if( rc != 0){
+                    TRACE_ERR("extent write error");
+                }else{
+                    el->ce_flags &= ~KFS_CACHE_NODE_DIRTY;
+                }
+            }
             if( (flags & KFS_CACHE_NODE_EVICT) != 0){
-                //clear element
+                free( el->ce_mem_ptr);
+                cache->ca_elements_in_use--;
+                el->ce_flags = 0;
+                pthread_mutex_unlock( &el->ce_mutex);
+                pthread_mutex_destroy( &el->ce_mutex);
+            }else{
+                pthread_mutex_unlock( &el->ce_mutex);
             }
         }
-        //disable cache mutex
-        //
+        cache->ca_flags &= ~KFS_CACHE_ON_LOOP;
+
+        pthread_mutex_unlock( &cache->ca_mutex);
         nanosleep( &request, &remaining);
 
 
@@ -63,18 +82,17 @@ cache_element_t *kfs_cache_map( cache_t *cache,
                                 uint64_t addr, 
                                 int numblocks, 
                                 uint32_t flags,
-                                uint32_t id,
                                 void *(*func)(void *)   ){
     int i, rc;
     uint32_t fc;
     cache_element_t **cel, *el;
-    int found = -1;
     
 
     el = NULL;
 
-
     pthread_mutex_lock( &cache->ca_mutex);
+
+    /* search an empty cache slot */
     for( i = 0; i < cache->ca_elements_capacity; i++){
         cel = &cache->ca_elements[i];
         fc = cel[i]->ce_flags;
@@ -82,30 +100,53 @@ cache_element_t *kfs_cache_map( cache_t *cache,
         if( fc & KFS_CACHE_NODE_ACTIVE){
             continue;
         }
-        found = i;
+        el = cel[i];
         break;
     }
 
 
-    if( found != 0){
-        el = cel[i];
-
+    if( el != NULL){
+        /* found a cache slot, fill in all the required data */
         el->ce_mem_ptr = malloc( numblocks * sizeof( KFS_BLOCKSIZE));
         if( el->ce_mem_ptr == NULL){
             TRACE_ERR("malloc error");
-            goto exit;
+            el = NULL;
+            goto exit0;
         }
 
-         rc = extent_read( cache->ca_fd, el->ce_mem_ptr, addr, numblocks );
+        rc = extent_read( cache->ca_fd, el->ce_mem_ptr, addr, numblocks);
+        if( rc != 0){
+            TRACE_ERR("extent read error");
+            free( el->ce_mem_ptr);
+            el = NULL;
+            goto exit0;
+        }
+
+        el->ce_block_addr = addr;
+        el->ce_num_blocks = numblocks;
+        el->ce_flags = flags | KFS_CACHE_ACTIVE;
+        el->ce_u_time = time( NULL);
+        el->ce_on_unmap_callback = func;
 
 
-        /* reserve mem, fill in, init its mutex */
+        if (pthread_mutex_init( &el->ce_mutex, NULL) != 0) { 
+            TRACE_ERR("mutex init has failed");
+            free( el->ce_mem_ptr);
+            el = NULL;
+            goto exit0;
+        } 
+
+        cache->ca_elements_in_use++;
+    }else{
+        TRACE_ERR("cache is full, can not map other extent");
     }
-
-exit:
+exit0:
     pthread_mutex_unlock( &cache->ca_mutex);
+    
     return( el);
 }
+
+
 
 int kfs_cache_alloc( cache_t *cache, int fd, int num_elems, int nanosec){
     void *p;
@@ -134,6 +175,8 @@ int kfs_cache_alloc( cache_t *cache, int fd, int num_elems, int nanosec){
     return(0);
 }
 
+
+
 int kfs_cache_start_thread( cache_t *cache){
     int rc;
 
@@ -157,8 +200,22 @@ int kfs_cache_start_thread( cache_t *cache){
 
 int kfs_cache_destroy( cache_t *cache);
 
-int kfs_cache_unmap( cache_t *cache, cache_element_t *ce);
+int kfs_cache_unmap( cache_element_t *ce){
+    
+    if(( ce->ce_flags & KFS_CACHE_NODE_ACTIVE) == 0){
+        TRACE_ERR("cache element not active");
+        return(-1);
+    }
 
 
+    pthread_mutex_lock( &ce->ce_mutex);
+    ce->ce_flags |= KFS_CACHE_NODE_EVICT;
+    pthread_mutex_lock( &ce->ce_mutex);
+    return(0);
+}
 
+
+int kfs_cache_loop_exit( cache_t *cache){
+
+}
 

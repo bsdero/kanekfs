@@ -22,7 +22,7 @@ typedef struct{
     uint64_t ce_block_addr;           /* block mapped */
     int ce_num_blocks; /* num of blocks */
     pthread_mutex_t ce_mutex;
-    void *(*on_unmap_callback)(void *);
+    void *(*ce_on_unmap_callback)(void *);
 }cache_element_t;
 
 

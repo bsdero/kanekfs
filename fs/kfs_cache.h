@@ -49,7 +49,11 @@ typedef struct{
 #define KFS_CACHE_PAUSE_LOOP             0x10 /* set this for pause the loop,
                                                  clear it for un pause */
 
-#define KFS_CACHE_EXIT_LOOP              0x20 /* set this for exit the loop */
+#define KFS_CACHE_EXIT_LOOP              0x20 /* set this for exit the loop
+                                                 flush out buffers, and 
+                                                 evict all */
+#define KFS_CACHE_EVICTED                0x40 /* if enabled, eveything has 
+                                                 been evicted, out now */
     pthread_mutex_t ca_mutex; 
     uint16_t ca_flags;
     int ca_nanosec;   /* sleep for N nanosecs */

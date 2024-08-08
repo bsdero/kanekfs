@@ -3,7 +3,8 @@ CFLAGS=-Wall -DUSER_SPACE -g -O0
 CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
-TESTS=testdict testrand testhash testdh testgc testmap testsizes kfs_test
+TESTS=testdict testrand testhash testdh testgc testmap testsizes kfs_test \
+      testbcache
 
 TOOLS=kfs_mkfs kfs_info kfs_server
 
@@ -52,6 +53,12 @@ testmap: testmap.o map.o
 
 testsizes: sizes.o
 	$(CC) -o testsizes sizes.o
+
+testbcache: testbcache.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
+	        kfs_io.o kfs_cache.o
+	$(CC) -o testbcache testbcache.o krand64.o dict.o hash.o dumphex.o gc.o \
+		map.o kfs_io.o kfs_cache.o -lpthread
+
 
 dumphex.o:
 	$(CC) -c dumphex.c $(CFLAGS)

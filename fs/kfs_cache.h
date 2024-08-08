@@ -59,9 +59,19 @@ typedef struct{
     int ca_nanosec;   /* sleep for N nanosecs */
     int ca_fd;
     pthread_t ca_thread; /* thread */
+    pthread_t ca_tid; /* thread id */
 }cache_t;
 
-
+cache_element_t *kfs_cache_element_map( cache_t *cache, 
+                                        uint64_t addr, 
+                                        int numblocks, 
+                                        uint32_t flags,
+                                        void *(*func)(void *)   );
+int kfs_cache_alloc( cache_t *cache, int fd, int num_elems, int nanosec);
+int kfs_cache_destroy( cache_t *cache);
+int kfs_cache_start_thread( cache_t *cache);
+int kfs_cache_element_unmap( cache_element_t *ce);
+int kfs_cache_element_mark_dirty( cache_element_t *ce);
 
 #endif
 

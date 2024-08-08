@@ -31,7 +31,6 @@ void *kfs_cache_loop_thread( void *cache_p){
             request.tv_nsec = nsec;
             continue;
         }
-        TRACE("ok1 [0x%x]", (uint32_t) cache->ca_flags);
  
         pthread_mutex_lock( &cache->ca_mutex);
         cache->ca_flags |= KFS_CACHE_ON_LOOP;
@@ -80,7 +79,6 @@ void *kfs_cache_loop_thread( void *cache_p){
         pthread_mutex_unlock( &cache->ca_mutex);
         nanosleep( &request, &remaining);
 
-        TRACE("ok2 [0x%x]", (uint32_t) cache->ca_flags);
  
     }while( (cache->ca_flags & KFS_CACHE_EVICTED) == 0);
 
@@ -122,12 +120,13 @@ cache_element_t *kfs_cache_element_map( cache_t *cache,
 
     if( el != NULL){
         /* found a cache slot, fill in all the required data */
-        el->ce_mem_ptr = malloc( numblocks * sizeof( KFS_BLOCKSIZE));
+        el->ce_mem_ptr = malloc( numblocks * KFS_BLOCKSIZE);
         if( el->ce_mem_ptr == NULL){
             TRACE_ERR("malloc error");
             el = NULL;
             goto exit0;
         }
+
 
         rc = extent_read( cache->ca_fd, el->ce_mem_ptr, addr, numblocks);
         if( rc != 0){
@@ -142,7 +141,6 @@ cache_element_t *kfs_cache_element_map( cache_t *cache,
         el->ce_flags = flags | KFS_CACHE_NODE_ACTIVE;
         el->ce_u_time = time( NULL);
         el->ce_on_unmap_callback = func;
-        TRACE("el.flags=0x%x", el->ce_flags);
 
         if (pthread_mutex_init( &el->ce_mutex, NULL) != 0) { 
             TRACE_ERR("mutex init has failed");
@@ -151,11 +149,14 @@ cache_element_t *kfs_cache_element_map( cache_t *cache,
             goto exit0;
         } 
 
+ 
         cache->ca_elements_in_use++;
     }else{
         TRACE_ERR("cache is full, can not map other extent");
     }
 exit0:
+
+    TRACE("el->ce_mem_ptr=0x%x", el->ce_mem_ptr);
     pthread_mutex_unlock( &cache->ca_mutex);
     
     TRACE("end");

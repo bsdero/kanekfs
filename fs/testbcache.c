@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include "dumphex.h"
 #include "kfs_cache.h"
 
 
@@ -39,19 +40,17 @@ int main( int argc, char **argv){
     rc = kfs_cache_start_thread( &cache);
     sleep(1);
 
-    el = kfs_cache_element_map( &cache, 0, 1, 0, NULL);
+    el = kfs_cache_element_map( &cache, 0, 1, 0, 0x0123456789abcdef);
     if( el == NULL){
         TRACE_ERR("Issues in kfs_cache_alloc()");
         close( fd);
         return( -1);
     }
-
     sleep(1);
-    strcpy( (char *) el->ce_mem_ptr, "KanekFS rules");
+
+    strncpy( (char *) el->ce_mem_ptr, "KanekFS rules", 13);
     kfs_cache_element_mark_dirty( el);
     sleep(1);
-    
-
 
     rc = kfs_cache_destroy( &cache);
     close( fd);

@@ -1,5 +1,9 @@
+# add this flags to CFLAGS to debug threads -fsanitize=address
+# add this to link to debug threads -fsanitize=address -static-libasan
 
-CFLAGS=-Wall -DUSER_SPACE -g -O0
+
+CFLAGS=-Wall -DUSER_SPACE -g -O0 
+LDFLAGS=-fsanitize=address -static-libasan
 CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
@@ -57,7 +61,7 @@ testsizes: sizes.o
 testbcache: testbcache.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
 	        kfs_io.o kfs_cache.o
 	$(CC) -o testbcache testbcache.o krand64.o dict.o hash.o dumphex.o gc.o \
-		map.o kfs_io.o kfs_cache.o -lpthread
+		map.o kfs_io.o kfs_cache.o -lpthread 
 
 
 dumphex.o:

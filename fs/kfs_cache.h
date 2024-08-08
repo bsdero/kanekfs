@@ -16,9 +16,9 @@
 #define KFS_CACHE_MASK           0x00ff 
 
 typedef struct{
-    void *ce_mem_ptr;   /* ptr to memory */
     uint64_t ce_flags;
     time_t ce_u_time;
+    void *ce_mem_ptr;   /* ptr to memory */
     uint64_t ce_block_addr;           /* block mapped */
     int ce_num_blocks; /* num of blocks */
     pthread_mutex_t ce_mutex;
@@ -29,7 +29,7 @@ typedef struct{
 /* generic cache structure */
 typedef struct{
     /* pointer to the elements array */
-    cache_element_t **ca_elements;
+    cache_element_t *ca_elements;
 
     /* number of elements in use and total */
     uint32_t ca_elements_in_use;

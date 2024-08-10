@@ -72,6 +72,8 @@ int kfs_cache_destroy( cache_t *cache);
 int kfs_cache_start_thread( cache_t *cache);
 int kfs_cache_element_unmap( cache_element_t *ce);
 int kfs_cache_element_mark_dirty( cache_element_t *ce);
+int kfs_cache_sync( cache_t *cache);
+
 
 #endif
 

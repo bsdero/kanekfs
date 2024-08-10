@@ -13,7 +13,7 @@
 void *kfs_cache_loop_thread( void *cache_p){
     cache_t *cache = ( cache_t *) cache_p;
     struct timespec remaining, request;
-    int rc, i, nsec = 900000;
+    int rc, i, nsec = 500000;
     cache_element_t *el;
     uint32_t flags; 
 
@@ -26,7 +26,7 @@ void *kfs_cache_loop_thread( void *cache_p){
 
     do{
         if( cache->ca_flags & KFS_CACHE_PAUSE_LOOP){
-            request.tv_nsec = 500000;
+            request.tv_nsec = 1000000;
             nanosleep( &request, &remaining);
             request.tv_nsec = nsec;
             continue;
@@ -296,4 +296,37 @@ int kfs_cache_element_mark_dirty( cache_element_t *ce){
     TRACE("end");
     return(0);
 }
+
+
+int kfs_cache_sync( cache_t *cache){
+    int i, rc;
+    cache_element_t *el;
+    void *ret;
+    TRACE("start");
+    if( (cache->ca_flags & KFS_CACHE_READY) == 0){
+        TRACE_ERR("cache is not ready, abort");
+        return(-1);
+    }
+
+    pthread_mutex_lock( &cache->ca_mutex);
+    for( i = 0; i < cache->ca_elements_capacity; i++){
+        el = &cache->ca_elements[i];
+
+        if((el->ce_flags & KFS_CACHE_NODE_ACTIVE) == 0){
+            continue;
+        }
+        rc = kfs_cache_element_unmap( el);
+        if( rc != 0){
+            TRACE_ERR("Cache element not active");
+        }
+    }
+    
+    pthread_mutex_unlock( &cache->ca_mutex);
+
+
+    TRACE("end");
+
+    return(0);
+}
+
 

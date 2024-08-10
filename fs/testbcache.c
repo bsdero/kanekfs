@@ -14,7 +14,9 @@ int main( int argc, char **argv){
     cache_t cache;
     int rc, fd;
     char *filename;
-    cache_element_t *el;
+    cache_element_t *el, *el2;
+    char s1[] = "dabale arroz a la zorra el abad";
+    char s2[] = "was it a car or a cat i saw";
 
     if( argc != 2){
         printf("Usage: testbcache <file>\n");
@@ -48,9 +50,26 @@ int main( int argc, char **argv){
     }
     sleep(1);
 
-    strncpy( (char *) el->ce_mem_ptr, "KanekFS rules", 13);
+    strcpy( (char *) el->ce_mem_ptr, s1);
     kfs_cache_element_mark_dirty( el);
     sleep(1);
+
+    el2 = kfs_cache_element_map( &cache, 10, 1, 0, 0x0123456789abcdef);
+    if( el2 == NULL){
+        TRACE_ERR("Issues in kfs_cache_alloc()");
+        close( fd);
+        return( -1);
+    }
+    sleep(1);
+    strcpy( (char *) el->ce_mem_ptr, s2);
+    kfs_cache_element_mark_dirty( el);
+    strcpy( (char *) el2->ce_mem_ptr, s1);
+    kfs_cache_element_mark_dirty( el2);
+    sleep(2);
+
+
+
+
 
     rc = kfs_cache_destroy( &cache);
     close( fd);

@@ -8,7 +8,7 @@ rather than a hierarchical tree.
 
 The filesystems scheme based on directories and files, organized in a 
 hierarchical tree has been around for quite some decades now. This design has 
-been successful. The directories and files approach became the de facto 
+been successful. The directories and files approach became the 'de facto' 
 standard for all the existing storage solutions, at the point that is hard to 
 imagine another way to organize a file system. Standards like posix included
 the file systems organized in hierarchical tree more than three decades ago.
@@ -31,12 +31,7 @@ I think the operating systems and storage technologies should continue
 evolving, explore new approaches and expanding the capabilities.
 
 For this project I am trying to explore a Graph file system design, and this 
-is the repo of this experimental approach. In this project we will try to 
-achieve the next goals:
-- Link related files
-- Add metadata to files and relations
-- Massive scale out and virtualization
-- To be compatible with old standards as possible
+is the repo of this experimental approach. In this project we will address this, from a file system running in the user space.
 
 
 ___
@@ -65,8 +60,7 @@ In terms of file systems, an inode may be:
 "directory entries". Each directory entry has a name and an inode number, 
 thus, it may point to another directory, a file, a link or other. We may 
 imagine a directory as a "folder", which holds files inside.
-- A link is a directory entry to an object, which already has another directory 
-entry pointing to it.
+- A link is a directory entry to an object, which already has another directory entry pointing to it.
 - A device file, sockets, pipes, they are IO channels mapped to a file in the 
 file system.
 
@@ -89,10 +83,10 @@ Some sources:
 - [https://en.m.wikipedia.org/wiki/Unix_file_types](https://en.m.wikipedia.org/wiki/Unix_file_types)
 
 ---
-## Never Ending File System design 
+## Kanek File System design 
 ### Graph File system design
 Good. So, how is a file system organized in a graph, rather than a 
-hierarchical tree?
+hierarchical tree? The next section will explain that question.
 
 
 #### Super Inode
@@ -188,7 +182,7 @@ preserved, except:
 
 #### With this design we may:
 
-1. we have a graph. So any node may be the root node. No exceptions.
+1. we have a graph. So any node may be the root node, and we can still have access to the whole file system. No exceptions.
 2. relations may be stablished between nodes, and the relations may have 
 metadata.
 3. also the super block may have its own dictionary/metadata.

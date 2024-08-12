@@ -21,6 +21,7 @@
 #define OPT_PERCENTAGE                             0x0020
 #define OPT_VERBOSE                                0x0040
 #define OPT_HELP                                   0x0080
+#define OPT_META                                   0x0100
 
 #define MKFS_CREATE_FILE                           0x0100
 #define MKFS_IS_BLOCKDEVICE                        0x0200
@@ -88,6 +89,7 @@ int display_help(){
         "      -c                Calc number of items",
         "      -p percentage     super inodes and slots percentage", 
         "      -v                Verbose mode",
+        "      -m metadata       Metadata in the superblock",
         "      -h                Help",
         "",
         "    kfs_mkfs creates a kfs filesystem in the specified file name.",
@@ -132,6 +134,12 @@ int display_help(){
         "       super inodes and slots. The default is about 12%. It needs",
         "       to know the disk size before, so it can be used with -s   ",
         "       and -c.",
+        "",
+        "      -If [-m] is specified, the next argument are key-values, and",
+        "       this data will be stored in the metadata slot #0, which is ",
+        "       exclusive for the superblock. The data stored has the form ",
+        "       of a comma separated key=values, like:                     ",
+        "       \"version=0.01,date=08/14/2024,owner=root\" ",
         "",
         "      -Options [-s, -i, -n, -c] can be used together.",
         "",       
@@ -672,13 +680,12 @@ int build_filesystem_in_file(){
         return( rc);
     }
 
-
     rc = write_map( fd);
     if( rc < 0){
         return( rc);
     }
 
-   close( fd);
+    close( fd);
 
     return( rc);
 }
@@ -855,7 +862,7 @@ int parse_opts( int argc, char **argv){
     int need_file = 1;
 
     flags = 0;
-    char opc[] = "s:i:n:cp:vh";
+    char opc[] = "s:i:n:cp:vhm:";
     memset( (void *) &options, 0, sizeof( options_t));
 
     if( argc == 0){
@@ -892,6 +899,8 @@ int parse_opts( int argc, char **argv){
             case 'h':
                 flags |= OPT_HELP;
                 break;
+            case 'm':
+                flags |= OPT_META;
             default: /* '?' */
                 fprintf(stderr, "ERROR: invalid argument.\n");
                 display_help();

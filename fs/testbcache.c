@@ -42,7 +42,7 @@ int main( int argc, char **argv){
     rc = kfs_cache_start_thread( &cache);
     sleep(1);
 
-    el = kfs_cache_element_map( &cache, 0, 1, 0, 0x0123456789abcdef);
+    el = kfs_cache_element_map( &cache, 0, 1, 0, NULL);
     if( el == NULL){
         TRACE_ERR("Issues in kfs_cache_alloc()");
         close( fd);
@@ -54,7 +54,7 @@ int main( int argc, char **argv){
     kfs_cache_element_mark_dirty( el);
     sleep(1);
 
-    el2 = kfs_cache_element_map( &cache, 10, 1, 0, 0x0123456789abcdef);
+    el2 = kfs_cache_element_map( &cache, 10, 1, 0, NULL);
     if( el2 == NULL){
         TRACE_ERR("Issues in kfs_cache_alloc()");
         close( fd);

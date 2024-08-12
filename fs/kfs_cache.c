@@ -14,6 +14,7 @@ void *kfs_cache_loop_thread( void *cache_p){
     cache_t *cache = ( cache_t *) cache_p;
     struct timespec remaining, request;
     int rc, i, nsec = 500000;
+    void *arg_res; 
     cache_element_t *el;
     uint32_t flags; 
 
@@ -48,7 +49,7 @@ void *kfs_cache_loop_thread( void *cache_p){
             }
 
             if( (flags & KFS_CACHE_NODE_DIRTY) != 0){
-                TRACE("dirty, will flush i=%d", i);
+                el->ce_count++;
                 rc = extent_write( cache->ca_fd, 
                                    el->ce_mem_ptr, 
                                    el->ce_block_addr, 
@@ -61,17 +62,25 @@ void *kfs_cache_loop_thread( void *cache_p){
                 TRACE("flushed out");
             }
             if( (flags & KFS_CACHE_NODE_EVICT) != 0){
-                TRACE("will evict i=%d", i);
+                if( el->ce_on_unmap_callback != NULL){
+                    arg_res = (void *) &rc; 
+                    arg_res = el->ce_on_unmap_callback( ( void *) el );
+                    if( rc != 0){
+                        TRACE_ERR("error in unmap_callback, rc=%d",
+                                  *((int *)arg_res) );
+                    }
+                }
                 free( el->ce_mem_ptr);
+
                 cache->ca_elements_in_use--;
                 el->ce_flags = 0;
                 pthread_mutex_unlock( &el->ce_mutex);
                 pthread_mutex_destroy( &el->ce_mutex);
-                TRACE("evicted");
             }else{
                 pthread_mutex_unlock( &el->ce_mutex);
             }
         }
+
         cache->ca_flags &= ~KFS_CACHE_ON_LOOP;
         if( (cache->ca_flags & KFS_CACHE_EXIT_LOOP) != 0){
             cache->ca_flags |= KFS_CACHE_EVICTED;
@@ -79,7 +88,6 @@ void *kfs_cache_loop_thread( void *cache_p){
         pthread_mutex_unlock( &cache->ca_mutex);
         nanosleep( &request, &remaining);
 
- 
     }while( (cache->ca_flags & KFS_CACHE_EVICTED) == 0);
 
 
@@ -116,8 +124,6 @@ cache_element_t *kfs_cache_element_map( cache_t *cache,
         break;
     }
 
-    TRACE("i=%d, el=[0x%x]", i, el);
-
     if( el != NULL){
         /* found a cache slot, fill in all the required data */
         el->ce_mem_ptr = malloc( numblocks * KFS_BLOCKSIZE);
@@ -139,9 +145,8 @@ cache_element_t *kfs_cache_element_map( cache_t *cache,
         el->ce_block_addr = addr;
         el->ce_num_blocks = numblocks;
         el->ce_flags = flags | KFS_CACHE_NODE_ACTIVE;
-        el->ce_u_time = time( NULL);
         el->ce_on_unmap_callback = func;
-
+        el->ce_count = 1;
         if (pthread_mutex_init( &el->ce_mutex, NULL) != 0) { 
             TRACE_ERR("mutex init has failed");
             free( el->ce_mem_ptr);
@@ -156,7 +161,6 @@ cache_element_t *kfs_cache_element_map( cache_t *cache,
     }
 exit0:
 
-    TRACE("el->ce_mem_ptr=0x%x", el->ce_mem_ptr);
     pthread_mutex_unlock( &cache->ca_mutex);
     
     TRACE("end");
@@ -206,7 +210,6 @@ int kfs_cache_start_thread( cache_t *cache){
         return(-1);
     }
 
-    TRACE("about to run thread");
     rc = pthread_create( &cache->ca_thread, 
                          NULL, 
                          kfs_cache_loop_thread,
@@ -240,14 +243,12 @@ int kfs_cache_destroy( cache_t *cache){
         if((el->ce_flags & KFS_CACHE_NODE_ACTIVE) == 0){
             continue;
         }
-        TRACE("will unmap el=0x%x, i=%d, flags=0x%x", el, i, el->ce_flags);
         rc = kfs_cache_element_unmap( el);
         if( rc != 0){
             TRACE_ERR("Cache element not active");
         }
     }
     
-    TRACE("about out mutex, ca_thread=%d, ca_tid=%d", cache->ca_thread, cache->ca_tid);
     cache->ca_flags |= KFS_CACHE_EXIT_LOOP;    
     pthread_mutex_unlock( &cache->ca_mutex);
 
@@ -301,7 +302,6 @@ int kfs_cache_element_mark_dirty( cache_element_t *ce){
 int kfs_cache_sync( cache_t *cache){
     int i, rc;
     cache_element_t *el;
-    void *ret;
     TRACE("start");
     if( (cache->ca_flags & KFS_CACHE_READY) == 0){
         TRACE_ERR("cache is not ready, abort");

@@ -19,7 +19,7 @@ typedef union value_u{
 
 typedef struct{
     unsigned char data_type;
-#define DICT_NULL                                  0:xa
+#define DICT_NULL                                  0
 #define DICT_INT                                   1
 #define DICT_UINT                                  2
 #define DICT_FLOAT                                 3

@@ -16,7 +16,6 @@
 #include <ctype.h>
 #include "trace.h"
 #include "dict.h"
-#include "kfs_cache.h"
 
 #define KFS_BLOCKSIZE                             8192
 
@@ -145,7 +144,7 @@ typedef struct{
     uint64_t in_use;
     extent_t bitmap_extent; 
     extent_t table_extent;
-    cache_t *cache;
+    void *cache;
 }table_t;
 
 typedef table_t slot_table_t;
@@ -156,8 +155,8 @@ typedef struct{
     uint64_t sb_magic;    /* set this if super block is active */
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
 
-    /* extents cache */
-    cache_t *sb_extents_cache;
+    /* extents cache and cached super block */
+    void *sb_extents_cache, sb_cache_element;
 
     /* super inodes capacity, used inodes, cache, and extents */
     si_table_t sb_si_table;

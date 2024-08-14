@@ -8,9 +8,12 @@
 #include <sys/ioctl.h>
 #include <ctype.h>
 #include "kfs.h"
+#include "kfs_page_cache.h"
 
 sb_t __sb = { 0};
 
+
+/* Cut spaces */
 char *trim (char *s){
   /* Initialize start, end pointers */
   char *s1 = s;
@@ -541,26 +544,34 @@ void kfsex_2_ex( extent_t *ex, kfs_extent_t *kex){
     ex->ex_log_addr = kex->ee_log_addr;
 }
 
+/* open a kfs_filesystem */ 
+int kfs_open( kfs_config_t *config){
+    int rc, fd; 
 
-int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
-    char *p; 
+    rc = kfs_verify( config->kfs_file, 0, 0);
+    if( rc < 0){
+        TRACE_ERR("Verification failed, abort");
+        return( rc);
+    }
+
+    fd = open( config->kfs_file, O_RDWR );
+    if( fd < 0){
+        TRACE_ERR( "ERROR: Could not open file '%s'\n", config->kfs_file);
+    }
+
+    return( fd);
+}
+
+
+
+/* read super block from a memory block */
+int kfs_load_superblock( void *p, sb_t *sb){
     int rc; 
     kfs_superblock_t *kfs_sb;
     kfs_extent_t *kex;
     extent_t *ex;
     time_t now;
      
-    p = pages_alloc( 1);
-    if( p == NULL){
-        TRACE_ERR("Superblock could not be loaded");
-        return( -1);
-    }
-
-    rc = block_read( fd, p, 0);
-    if( rc < 0){
-        return( rc);
-    }
-
     kfs_sb = (kfs_superblock_t *) p;
 
     if( kfs_sb->sb_magic != KFS_MAGIC){
@@ -573,13 +584,13 @@ int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
 
     kfs_sb->sb_m_time = kfs_sb->sb_a_time = now; 
 
-    sb->sb_root_super_inode = rsi;
+    sb->sb_root_super_inode = kfs_sb->sb_root_super_inode;
     sb->sb_flags = kfs_sb->sb_flags;
     sb->sb_c_time = kfs_sb->sb_c_time;
     sb->sb_m_time = kfs_sb->sb_m_time;
     sb->sb_a_time = kfs_sb->sb_a_time;
     sb->sb_bdev = fd;
-    
+    sb->sb_magic = kfs_sb->sb_magic;
     sb->sb_si_table.capacity = kfs_sb->sb_si_table.capacity;
     sb->sb_si_table.in_use = kfs_sb->sb_si_table.in_use;
     kex = &kfs_sb->sb_si_table.table_extent;
@@ -609,45 +620,84 @@ int kfs_load_superblock( int fd, sb_t *sb, uint64_t rsi){
     kfsex_2_ex( ex, kex);
 
 
-    sb->sb_flags = kfs_sb->sb_flags |= KFS_IS_MOUNTED;
-
-    block_write( fd, p, 0);
-    free( p); 
-
     return(0);
 }
 
 
-int kfs_open( kfs_config_t *config){
-    int rc, fd; 
-    sb_t sb;
+int kfs_mount( kfs_config_t *config, sb_t *sb){
+    int rc, fd;
+    pgcache_t pg_cache;
+    pgcache_element_t *el;
+    void *ppg;
+    kfs_superblock_t *kfs_sb;
 
 
-    rc = kfs_verify( config->kfs_file, 0, 0);
-    if( rc < 0){
-        TRACE_ERR("Verification failed, abort");
-        return( rc);
-    }
-
-
-    fd = open( config->kfs_file, O_RDWR );
+    fd = kfs_open( config);
     if( fd < 0){
-        TRACE_ERR( "ERROR: Could not open file '%s'\n", config->kfs_file);
-        return( -1);
+        TRACE_ERR("kfs_open() failed! abort.")
+        rc = -1;
+        goto exit0; 
     }
 
-    rc = kfs_load_superblock( fd, &sb, config->root_super_inode);
+    rc = kfs_pgcache_alloc( &pg_cache, fd, conf->cache_page_len, 50000);
+    if( rc != 0){
+        TRACE_ERR("Issues in kfs_pgcache_alloc()");
+        close( fd);
+        goto exit0;
+    }
+
+    rc = kfs_pgcache_start_thread( &pg_cache);
+    if( rc != 0){
+        TRACE_ERR("Issues in kfs_pgcache_start_thread()");
+        close( fd);
+        goto exit0;
+    }
+
+    sleep(1);
+    el = kfs_pgcache_element_map( &pg_cache, 
+                                  0, 1,  /* load block 0, one block */
+                                  0, NULL); /*no flags, no on-evict callback */
+    if( el == NULL){
+        TRACE_ERR("Issues in kfs_pgcache_element_map()");
+        close( fd);
+        goto exit0;
+    }
+    sleep(1);
+
+
+    rc = kfs_load_superblock( el->ce_mem_ptr, sb);
     if( rc < 0){
         TRACE_ERR("Could not load superblock, abort");
-        return( rc);
+        kfs_pgcache_destroy( &cache);
+        sleep(1);
+        close(fd);
+        goto exit0;
     }
 
-    sb.sb_magic = KFS_MAGIC;
+
+    ppg = malloc( sizeof( pgcache_t));
+    if( ppc == NULL){
+        TRACE_ERR("malloc error in page cache");
+        kfs_pgcache_destroy( &cache);
+        sleep(1);
+        close(fd);
+        rc = -1;
+        goto exit0;
+    }
+
+    memcpy( ppg, &pg_cache, sizeof( pgcache_t));
+
+    sb->sb_extents_cache = (void *) ppg; 
+    sb->sb_cache_element = (void *) el;
+    sb->sb_flags = kfs_sb->sb_flags |= KFS_IS_MOUNTED;
+    kfs_cache
     __sb = sb;
 
-
-    return( 0);
+   
+exit0:
+    return( fd);
 }
+
 
 int kfs_active(){
     sb_t *sb = &__sb;

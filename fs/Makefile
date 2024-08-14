@@ -8,7 +8,7 @@ CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 TESTS=testdict testrand testhash testdh testgc testmap testsizes kfs_test \
-      testbcache
+      test_page_cache
 
 TOOLS=kfs_mkfs kfs_info kfs_server
 
@@ -58,11 +58,10 @@ testmap: testmap.o map.o
 testsizes: sizes.o
 	$(CC) -o testsizes sizes.o
 
-testbcache: testbcache.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
-	        kfs_io.o kfs_cache.o
-	$(CC) -o testbcache testbcache.o krand64.o dict.o hash.o dumphex.o gc.o \
-		map.o kfs_io.o kfs_cache.o -lpthread 
-
+test_page_cache: test_page_cache.o krand64.o dict.o hash.o dumphex.o gc.o \
+	        kfs_io.o kfs_cache.o map.o
+	$(CC) -o test_page_cache testbcache.o krand64.o dict.o hash.o dumphex.o \
+		map.o kfs_io.o kfs_cache.o gc.o -lpthread 
 
 dumphex.o:
 	$(CC) -c dumphex.c $(CFLAGS)
@@ -83,7 +82,4 @@ clean:
 	 else                                     \
 	   rm *.o $(TESTS) $(TOOLS);              \
 	 fi
-
-
-
 

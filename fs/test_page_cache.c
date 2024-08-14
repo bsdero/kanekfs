@@ -7,14 +7,14 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include "dumphex.h"
-#include "kfs_cache.h"
+#include "kfs_page_cache.h"
 
 
 int main( int argc, char **argv){
-    cache_t cache;
+    pgcache_t cache;
     int rc, fd;
     char *filename;
-    cache_element_t *el, *el2;
+    pgcache_element_t *el, *el2;
     char s1[] = "dabale arroz a la zorra el abad";
     char s2[] = "was it a car or a cat i saw";
 
@@ -31,47 +31,47 @@ int main( int argc, char **argv){
         return( -1);
     }
    
-    rc = kfs_cache_alloc( &cache, fd, 32, 10000);
+    rc = kfs_pgcache_alloc( &cache, fd, 32, 10000);
     if( rc != 0){
-        TRACE_ERR("Issues in kfs_cache_alloc()");
+        TRACE_ERR("Issues in kfs_pgcache_alloc()");
         close( fd);
         return( -1);
     }
     
 
-    rc = kfs_cache_start_thread( &cache);
+    rc = kfs_pgcache_start_thread( &cache);
     sleep(1);
 
-    el = kfs_cache_element_map( &cache, 0, 1, 0, NULL);
+    el = kfs_pgcache_element_map( &cache, 0, 1, 0, NULL);
     if( el == NULL){
-        TRACE_ERR("Issues in kfs_cache_alloc()");
+        TRACE_ERR("Issues in kfs_pgcache_alloc()");
         close( fd);
         return( -1);
     }
     sleep(1);
 
     strcpy( (char *) el->ce_mem_ptr, s1);
-    kfs_cache_element_mark_dirty( el);
+    kfs_pgcache_element_mark_dirty( el);
     sleep(1);
 
-    el2 = kfs_cache_element_map( &cache, 10, 1, 0, NULL);
+    el2 = kfs_pgcache_element_map( &cache, 10, 1, 0, NULL);
     if( el2 == NULL){
-        TRACE_ERR("Issues in kfs_cache_alloc()");
+        TRACE_ERR("Issues in kfs_pgcache_alloc()");
         close( fd);
         return( -1);
     }
     sleep(1);
     strcpy( (char *) el->ce_mem_ptr, s2);
-    kfs_cache_element_mark_dirty( el);
+    kfs_pgcache_element_mark_dirty( el);
     strcpy( (char *) el2->ce_mem_ptr, s1);
-    kfs_cache_element_mark_dirty( el2);
+    kfs_pgcache_element_mark_dirty( el2);
     sleep(2);
 
 
 
 
 
-    rc = kfs_cache_destroy( &cache);
+    rc = kfs_pgcache_destroy( &cache);
     close( fd);
 
     

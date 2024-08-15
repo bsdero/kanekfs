@@ -1,14 +1,13 @@
-DIRS=fs
-
 
 .PHONY: all
 
 
 
 all:
-	make -C $(DIRS)
+	@for D in fs cscope; do make -C $$D all; done
 
 
 clean:
-	make -C $(DIRS) clean 
+	@for D in fs cscope; do make -C $$D clean; done
+
 

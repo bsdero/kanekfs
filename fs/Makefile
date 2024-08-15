@@ -19,21 +19,28 @@ tests: objs $(TESTS)
 tools: objs $(TOOLS)
 
 
-kfs_info: kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
+kfs_info: kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
+	kfs_io.o kfs_page_cache.o
 	$(CC) -o kfs_info kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o
+		     map.o kfs_io.o  kfs_page_cache.o
 
-kfs_mkfs: kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
+
+kfs_mkfs: kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
+	kfs_io.o kfs_page_cache.o
 	$(CC) -o kfs_mkfs kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o
+		     map.o kfs_io.o kfs_page_cache.o
 
-kfs_server: kfs_server.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
+
+kfs_server: kfs_server.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
+	kfs_io.o kfs_page_cache.o
 	$(CC) -o kfs_server kfs_server.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o
+		     map.o kfs_io.o kfs_page_cache.o
 
-kfs_test: kfs_test.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o
+
+kfs_test: kfs_test.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o \
+	      kfs_page_cache.o
 	$(CC) -o kfs_test kfs_test.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o
+		     map.o kfs_io.o kfs_page_cache.o
 
 
 
@@ -59,9 +66,9 @@ testsizes: sizes.o
 	$(CC) -o testsizes sizes.o
 
 test_page_cache: test_page_cache.o krand64.o dict.o hash.o dumphex.o gc.o \
-	        kfs_io.o kfs_cache.o map.o
-	$(CC) -o test_page_cache testbcache.o krand64.o dict.o hash.o dumphex.o \
-		map.o kfs_io.o kfs_cache.o gc.o -lpthread 
+	        kfs_io.o kfs_page_cache.o map.o
+	$(CC) -o test_page_cache test_page_cache.o krand64.o dict.o hash.o \
+		dumphex.o map.o kfs_io.o kfs_page_cache.o gc.o -lpthread 
 
 dumphex.o:
 	$(CC) -c dumphex.c $(CFLAGS)

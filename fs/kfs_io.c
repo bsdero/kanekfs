@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <ctype.h>
 #include "kfs.h"
+#include "kfs_io.h"
 #include "kfs_page_cache.h"
 
 sb_t __sb = { 0};
@@ -624,7 +625,7 @@ int kfs_load_superblock( void *p, sb_t *sb){
 
 
 int kfs_mount( kfs_config_t *config, sb_t *sb){
-    int rc, fd;
+    int rc = 0, fd;
     pgcache_t pg_cache;
     pgcache_element_t *el;
     void *ppg;
@@ -635,20 +636,18 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
     if( fd < 0){
         TRACE_ERR("kfs_open() failed! abort.");
         rc = -1;
-        goto exit0; 
+        goto exit1; 
     }
 
     rc = kfs_pgcache_alloc( &pg_cache, fd, config->cache_page_len, 50000);
     if( rc != 0){
         TRACE_ERR("Issues in kfs_pgcache_alloc()");
-        close( fd);
-        goto exit0;
+        goto exit1;
     }
 
     rc = kfs_pgcache_start_thread( &pg_cache);
     if( rc != 0){
         TRACE_ERR("Issues in kfs_pgcache_start_thread()");
-        close( fd);
         goto exit0;
     }
 
@@ -658,7 +657,6 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
                                   0, NULL); /*no flags, no on-evict callback */
     if( el == NULL){
         TRACE_ERR("Issues in kfs_pgcache_element_map()");
-        close( fd);
         goto exit0;
     }
     sleep(1);
@@ -667,19 +665,14 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
     rc = kfs_load_superblock( el->ce_mem_ptr, sb);
     if( rc < 0){
         TRACE_ERR("Could not load superblock, abort");
-        kfs_pgcache_destroy( &pg_cache);
         sleep(1);
-        close(fd);
         goto exit0;
     }
-
+    kfs_sb = (kfs_superblock_t *) el->ce_mem_ptr;
 
     ppg = malloc( sizeof( pgcache_t));
     if( ppg == NULL){
         TRACE_ERR("malloc error in page cache");
-        kfs_pgcache_destroy( &pg_cache);
-        sleep(1);
-        close(fd);
         rc = -1;
         goto exit0;
     }
@@ -690,11 +683,19 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
     sb->sb_extents_cache = (void *) ppg; 
     sb->sb_cache_element = (void *) el;
     sb->sb_flags = kfs_sb->sb_flags |= KFS_IS_MOUNTED;
-    __sb = sb;
 
-   
+    kfs_pgcache_element_mark_dirty( el);
+    __sb = *sb;
+
+    goto exitOK;
+
 exit0:
-    return( fd);
+    kfs_pgcache_destroy( &pg_cache);
+    sleep(0);
+exit1:
+    close( fd);
+exitOK:
+    return( rc);
 }
 
 

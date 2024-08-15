@@ -8,7 +8,7 @@
 #include <sys/ioctl.h>
 #include "dumphex.h"
 #include "dict.h"
-#include "kfs_cache.h"
+#include "kfs_page_cache.h"
 
 #define OPT_F                            0x01
 #define OPT_K                            0x02
@@ -53,9 +53,10 @@ typedef struct{
 }sbmeta_t;
 
 int main( int argc, char **argv){
-    cache_t cache;
+    pgcache_t cache;
     int rc, fd, opt, flags, t;
-    cache_element_t *el, *el2;
+    pgcache_element_t *el, *el2;
+
     char opc[] = "f:k:v:t:ih";
     sbmeta_t meta;
     char val[128];

@@ -156,7 +156,8 @@ typedef struct{
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
 
     /* extents cache and cached super block */
-    void *sb_extents_cache, sb_cache_element;
+    void *sb_extents_cache;
+    void *sb_cache_element;
 
     /* super inodes capacity, used inodes, cache, and extents */
     si_table_t sb_si_table;

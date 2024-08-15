@@ -812,18 +812,6 @@ int kfs_superblock_update(){
         return( -1);
     }
    
-    p = pages_alloc( 1);
-    if( p == NULL){
-        TRACE_ERR("Superblock could not be updated");
-        return( -1);
-    }
-
-
-    rc = block_read( sb->sb_bdev, p, 0);
-    if( rc < 0){
-        return( rc);
-    }
-
     ksb = (kfs_superblock_t *) p;
 
     if( ksb->sb_magic != KFS_MAGIC){

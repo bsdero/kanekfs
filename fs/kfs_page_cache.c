@@ -7,17 +7,31 @@
 #include "kfs_page_cache.h"
 #include "kfs_io.h"
 
+/*
+int kfs_pgcache_wait_for_flag( uint32_t flag, int nanosec, int sec_timeout){
+    struct timespec remaining, request;
+    int rc = 0;
 
+    start_time = time(NULL);
+
+    while( 1){
+
+        current_time = time(NULL);
+        passed_time = current_time - start_time;
+
+    }
+*/
 
 
 
 void *kfs_pgcache_loop_thread( void *cache_p){
     pgcache_t *cache = ( pgcache_t *) cache_p;
     struct timespec remaining, request;
-    int rc, i, nsec = 500000;
+    int rc, i;
     void *arg_res; 
     pgcache_element_t *el;
-    uint32_t flags; 
+    uint32_t flags;
+    uint64_t nsec = 100000000L; /*     1/10th of second */
 
     TRACE("start");
     cache->ca_tid = pthread_self();
@@ -28,8 +42,10 @@ void *kfs_pgcache_loop_thread( void *cache_p){
 
     do{
         if( cache->ca_flags & KFS_PGCACHE_PAUSE_LOOP){
-            request.tv_nsec = 1000000;
+            request.tv_nsec = 0;
+            request.tv_sec = 1;  /* pause for one second */
             nanosleep( &request, &remaining);
+            request.tv_sec = 0;
             request.tv_nsec = nsec;
             continue;
         }

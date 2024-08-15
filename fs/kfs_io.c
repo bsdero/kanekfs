@@ -566,7 +566,6 @@ int kfs_open( kfs_config_t *config){
 
 /* read super block from a memory block */
 int kfs_load_superblock( void *p, sb_t *sb){
-    int rc; 
     kfs_superblock_t *kfs_sb;
     kfs_extent_t *kex;
     extent_t *ex;
@@ -589,7 +588,7 @@ int kfs_load_superblock( void *p, sb_t *sb){
     sb->sb_c_time = kfs_sb->sb_c_time;
     sb->sb_m_time = kfs_sb->sb_m_time;
     sb->sb_a_time = kfs_sb->sb_a_time;
-    sb->sb_bdev = fd;
+    
     sb->sb_magic = kfs_sb->sb_magic;
     sb->sb_si_table.capacity = kfs_sb->sb_si_table.capacity;
     sb->sb_si_table.in_use = kfs_sb->sb_si_table.in_use;
@@ -634,12 +633,12 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
 
     fd = kfs_open( config);
     if( fd < 0){
-        TRACE_ERR("kfs_open() failed! abort.")
+        TRACE_ERR("kfs_open() failed! abort.");
         rc = -1;
         goto exit0; 
     }
 
-    rc = kfs_pgcache_alloc( &pg_cache, fd, conf->cache_page_len, 50000);
+    rc = kfs_pgcache_alloc( &pg_cache, fd, config->cache_page_len, 50000);
     if( rc != 0){
         TRACE_ERR("Issues in kfs_pgcache_alloc()");
         close( fd);
@@ -668,7 +667,7 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
     rc = kfs_load_superblock( el->ce_mem_ptr, sb);
     if( rc < 0){
         TRACE_ERR("Could not load superblock, abort");
-        kfs_pgcache_destroy( &cache);
+        kfs_pgcache_destroy( &pg_cache);
         sleep(1);
         close(fd);
         goto exit0;
@@ -676,9 +675,9 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
 
 
     ppg = malloc( sizeof( pgcache_t));
-    if( ppc == NULL){
+    if( ppg == NULL){
         TRACE_ERR("malloc error in page cache");
-        kfs_pgcache_destroy( &cache);
+        kfs_pgcache_destroy( &pg_cache);
         sleep(1);
         close(fd);
         rc = -1;
@@ -687,10 +686,10 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
 
     memcpy( ppg, &pg_cache, sizeof( pgcache_t));
 
+    sb->sb_bdev = fd;
     sb->sb_extents_cache = (void *) ppg; 
     sb->sb_cache_element = (void *) el;
     sb->sb_flags = kfs_sb->sb_flags |= KFS_IS_MOUNTED;
-    kfs_cache
     __sb = sb;
 
    

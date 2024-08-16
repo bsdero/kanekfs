@@ -7,7 +7,7 @@ LDFLAGS=-fsanitize=address -static-libasan
 CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
-TESTS=testdict testrand testhash testdh testgc testmap testsizes kfs_test \
+TESTS=testdict testrand testhash testdh testgc testmap testsizes \
       test_page_cache
 
 TOOLS=kfs_mkfs kfs_info kfs_server

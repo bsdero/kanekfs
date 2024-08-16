@@ -11,6 +11,9 @@
 #define KFS_PGCACHE_ND_PINNED      0x0008 /* dont remove this from cache */
 #define KFS_PGCACHE_ND_FORCE_MAP   0x0010 /* evict LRU cache element and 
                                                 put this one on place */
+#define KFS_PGCACHE_ND_CLEAN       0x0020 /* this flag should be enabled only
+                                             if the node is active and NOT
+                                             dirty */
 #define KFS_PGCACHE_MASK           0x00ff 
 
 typedef struct{
@@ -52,6 +55,7 @@ typedef struct{
                                            evict all */
 #define KFS_PGCACHE_EVICTED        0x40 /* if enabled, eveything has 
                                            been evicted, out now */
+
     pthread_mutex_t ca_mutex; 
     uint16_t ca_flags;
     int ca_nanosec;   /* sleep for N nanosecs */
@@ -72,6 +76,10 @@ int kfs_pgcache_element_unmap( pgcache_element_t *ce);
 int kfs_pgcache_element_mark_dirty( pgcache_element_t *ce);
 int kfs_pgcache_sync( pgcache_t *cache);
 
+int kfs_pgcache_flags_wait( pgcache_t *cache, uint32_t flags, int timeout_secs);
+int kfs_pgcache_element_flags_wait( pgcache_element_t *el, 
+                                    uint32_t flags, 
+                                    int timeout_secs);
 
 #endif
 

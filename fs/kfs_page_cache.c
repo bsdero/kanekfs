@@ -3,26 +3,14 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdint.h>
+#include <sys/time.h>
 #include "trace.h"
 #include "kfs_page_cache.h"
 #include "kfs_io.h"
 
-/*
-int kfs_pgcache_wait_for_flag( uint32_t flag, int nanosec, int sec_timeout){
-    struct timespec remaining, request;
-    int rc = 0;
-
-    start_time = time(NULL);
-
-    while( 1){
-
-        current_time = time(NULL);
-        passed_time = current_time - start_time;
-
-    }
-*/
-
-
+/* 1000000000 nanosecs == 1 second. */
+#define NANOSECS_DELAY                   100000000ul
+#define MILISECS_PER_SECOND              1000000000ul
 
 void *kfs_pgcache_loop_thread( void *cache_p){
     pgcache_t *cache = ( pgcache_t *) cache_p;
@@ -75,6 +63,7 @@ void *kfs_pgcache_loop_thread( void *cache_p){
                     TRACE_ERR("extent write error");
                 }else{
                     el->ce_flags &= ~KFS_PGCACHE_ND_DIRTY;
+                    el->ce_flags |= KFS_PGCACHE_ND_CLEAN;
                 }
                 TRACE("flushed out");
             }
@@ -168,7 +157,7 @@ pgcache_element_t *kfs_pgcache_element_map( pgcache_t *cache,
 
         el->ce_block_addr = addr;
         el->ce_num_blocks = numblocks;
-        el->ce_flags = flags | KFS_PGCACHE_ND_ACTIVE;
+        el->ce_flags = flags | KFS_PGCACHE_ND_ACTIVE | KFS_PGCACHE_ND_CLEAN;
         el->ce_on_unmap_callback = func;
         el->ce_count = 1;
  
@@ -310,6 +299,7 @@ int kfs_pgcache_element_mark_dirty( pgcache_element_t *ce){
 
     pthread_mutex_lock( &ce->ce_mutex);
     ce->ce_flags |= KFS_PGCACHE_ND_DIRTY;
+    ce->ce_flags &= ~KFS_PGCACHE_ND_CLEAN;
     pthread_mutex_unlock( &ce->ce_mutex);
     TRACE("end");
     return(0);
@@ -344,6 +334,90 @@ int kfs_pgcache_sync( pgcache_t *cache){
     TRACE("end");
 
     return(0);
+}
+
+/* if flags == 0, it will exit when (cache->ca_flags == 0).
+ * if flags != 0, it will exit when (cache->ca_flags & flags == 0)
+ * timeout are seconds to exit. If timeout reached, the return code will
+ * be != 0.
+ *
+ */
+int kfs_pgcache_flags_wait( pgcache_t *cache, 
+                           uint32_t flags, 
+                           int timeout_secs){
+    struct timespec start_time, sleep_time, current_time, diff_time;
+    int rc = 0;
+
+
+    clock_gettime( CLOCK_MONOTONIC, &start_time);
+    current_time = start_time;
+    while(1){
+        sleep_time = current_time;
+        sleep_time.tv_nsec += NANOSECS_DELAY;
+        if( sleep_time.tv_nsec >= MILISECS_PER_SECOND){
+            sleep_time.tv_nsec -= MILISECS_PER_SECOND;
+            sleep_time.tv_sec++;
+        }
+        clock_nanosleep( CLOCK_MONOTONIC, TIMER_ABSTIME, &sleep_time, NULL);
+        clock_gettime( CLOCK_MONOTONIC, &current_time);
+
+        timespecsub( &current_time, &start_time, &diff_time);
+        if( diff_time.tv_sec >= timeout_secs){
+            rc = 1;
+            break;
+        }
+
+        if( ( flags == 0 && cache->ca_flags == 0) || 
+            ( flags != 0 && ( ( cache->ca_flags & flags) == flags)) ){
+            rc = 0;
+            break;
+        }
+    }
+
+    return( rc);
+}
+
+int kfs_pgcache_element_flags_wait( pgcache_element_t *el, 
+                                    uint32_t flags, 
+                                    int timeout_secs){
+
+    struct timespec start_time, sleep_time, current_time, diff_time;
+    int rc = 0;
+
+
+    clock_gettime( CLOCK_MONOTONIC, &start_time);
+    current_time = start_time;
+    while(1){
+        sleep_time = current_time;
+        sleep_time.tv_nsec += NANOSECS_DELAY;
+        if( sleep_time.tv_nsec >= MILISECS_PER_SECOND){
+            sleep_time.tv_nsec -= MILISECS_PER_SECOND;
+            sleep_time.tv_sec++;
+        }
+        clock_nanosleep( CLOCK_MONOTONIC, TIMER_ABSTIME, &sleep_time, NULL);
+        clock_gettime( CLOCK_MONOTONIC, &current_time);
+
+        timespecsub( &current_time, &start_time, &diff_time);
+        if( diff_time.tv_sec >= timeout_secs){
+            rc = 1;
+            break;
+        }
+
+
+        pthread_mutex_lock( &el->ce_mutex);
+
+        if( ( flags == 0 && el->ce_flags == 0) || 
+            ( flags != 0 && ( ( el->ce_flags & flags) == flags)) ){
+            rc = 0;
+        }
+        pthread_mutex_unlock( &el->ce_mutex);
+
+        if( rc == 0){
+            break;
+        }
+    }
+
+    return( rc);
 }
 
 

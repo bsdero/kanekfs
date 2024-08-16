@@ -25,15 +25,18 @@
 void kfs_sb_statfs();
 void kfs_sb_sl_table_dump();
 void kfs_sb_si_table_dump();
+void kfs_sb_dump();
 sinode_t kfs_sb_alloc_sinode(); /* alloc and fill in a super inode */
 void kfs_sb_destroy_sinode( sinode_t *sinode); /* undo whatever done in
                                                 kfs_sb_alloc_sinode */
 slot_t kfs_sb_alloc_slot(); /* alloc and fill in a slot */
 void kfs_sb_detroy_slot( slot_t *slot); /* undo whatever done in 
                                             kfs_sb_alloc_slot */
+void kfs_sb_mount();
+void kfs_sb_umount();
 void kfs_sb_sync();
 void kfs_sb_put_super();
-void kfs_sb_get_super( char *file_name);
+void kfs_sb_get_super();
 void kfs_sb_evict_inode( sinode_t *sinode);
 void kfs_sb_evict_slot( slot_t *slot);
 

@@ -18,6 +18,8 @@
 ./fs/kfs_page_cache.h
 ./fs/kfs_server.c
 ./fs/kfs_set_sb_meta.c
+./fs/kfs_super.c
+./fs/kfs_super.h
 ./fs/kfs_test.c
 ./fs/krand64.c
 ./fs/krand64.h
@@ -25,8 +27,6 @@
 ./fs/map.c
 ./fs/map.h
 ./fs/sizes.c
-./fs/super.c
-./fs/super.h
 ./fs/testdh.c
 ./fs/testdict.c
 ./fs/testgc.c
@@ -36,3 +36,5 @@
 ./fs/test_page_cache.c
 ./fs/trace.c
 ./fs/trace.h
+./snippets/test_clock.c
+./snippets/test_clock_delay.c

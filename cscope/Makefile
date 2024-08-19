@@ -9,7 +9,7 @@ list:
 cscope_index:
 	@cd ..;                                       \
 	CSCOPE=`which cscope`;                        \
-	if [[ "$$CSCOPE" != "" ]]; then               \
+	if [ "$$CSCOPE" != "" ]; then               \
 	    $$CSCOPE -q -R -b -i cscope/cscope.files; \
 	fi
 

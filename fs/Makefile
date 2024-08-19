@@ -68,7 +68,7 @@ testsizes: sizes.o
 test_page_cache: test_page_cache.o krand64.o dict.o hash.o dumphex.o gc.o \
 	        kfs_io.o kfs_page_cache.o map.o
 	$(CC) -o test_page_cache test_page_cache.o krand64.o dict.o hash.o \
-		dumphex.o map.o kfs_io.o kfs_page_cache.o gc.o -lpthread 
+		dumphex.o map.o kfs_io.o kfs_page_cache.o gc.o -lpthread
 
 dumphex.o:
 	$(CC) -c dumphex.c $(CFLAGS)

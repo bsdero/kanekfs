@@ -11,9 +11,8 @@
 #include "kfs_io.h"
 #include "kfs_page_cache.h"
 
+sb_t __sb = { 0};
 
-extern sb_t __sb;
-                    
 
 /* super block methods */
 void ex_2_kfsex( kfs_extent_t *kex, extent_t *ex){
@@ -48,13 +47,10 @@ void kfs_sb_statfs(){
 
 
 /* read super block from a memory block */
-int kfs_load_superblock( void *p, sb_t *sb){
-    kfs_superblock_t *kfs_sb;
+int kfs_load_superblock( kfs_superblock_t *kfs_sb, sb_t *sb){
     kfs_extent_t *kex;
     extent_t *ex;
      
-    kfs_sb = (kfs_superblock_t *) p;
-
     if( kfs_sb->sb_magic != KFS_MAGIC){
         TRACE_ERR("Not a KFS file system. Abort.");
         return( -1);
@@ -67,7 +63,6 @@ int kfs_load_superblock( void *p, sb_t *sb){
     sb->sb_c_time = kfs_sb->sb_c_time;
     sb->sb_m_time = kfs_sb->sb_m_time;
     sb->sb_a_time = kfs_sb->sb_a_time;
-    
     sb->sb_magic = kfs_sb->sb_magic;
     sb->sb_si_table.capacity = kfs_sb->sb_si_table.capacity;
     sb->sb_si_table.in_use = kfs_sb->sb_si_table.in_use;
@@ -103,9 +98,8 @@ int kfs_load_superblock( void *p, sb_t *sb){
 
 int kfs_mount( kfs_config_t *config, sb_t *sb){
     int rc = 0, fd;
-    pgcache_t pg_cache;
+    pgcache_t *pg_cache;
     pgcache_element_t *el;
-    void *ppg;
     kfs_superblock_t *kfs_sb;
     time_t now;
 
@@ -116,48 +110,48 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
         goto exit1; 
     }
 
-    rc = kfs_pgcache_alloc( &pg_cache, fd, config->cache_page_len, 50000);
-    if( rc != 0){
+    pg_cache = kfs_pgcache_alloc( fd, config->cache_page_len);
+    if( pg_cache == NULL){
         TRACE_ERR("Issues in kfs_pgcache_alloc()");
+        rc = -1;
         goto exit1;
     }
 
-    rc = kfs_pgcache_start_thread( &pg_cache);
+    rc = kfs_pgcache_start_thread( pg_cache);
     if( rc != 0){
         TRACE_ERR("Issues in kfs_pgcache_start_thread()");
         goto exit0;
     }
 
-    sleep(1);
-    el = kfs_pgcache_element_map( &pg_cache, 
+    rc = kfs_pgcache_flags_wait( pg_cache, KFS_PGCACHE_ACTIVE, 10);
+    if( rc != 0){
+        TRACE_ERR("timeout waiting for KFS_PGCACHE_ACTIVE");
+        goto exit0;
+    }
+
+    el = kfs_pgcache_element_map( pg_cache, 
                                   0, 1,  /* load block 0, one block */
                                   0, NULL); /*no flags, no on-evict callback */
     if( el == NULL){
         TRACE_ERR("Issues in kfs_pgcache_element_map()");
         goto exit0;
     }
-    sleep(1);
 
+    rc = kfs_pgcache_element_flags_wait( el, KFS_PGCACHE_ND_ACTIVE, 10);
+    if( rc != 0){
+        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_ACTIVE");
+        goto exit0;
+    }
 
-    rc = kfs_load_superblock( el->ce_mem_ptr, sb);
+    kfs_sb = (kfs_superblock_t *) el->ce_mem_ptr;
+    rc = kfs_load_superblock( kfs_sb, sb);
     if( rc < 0){
         TRACE_ERR("Could not load superblock, abort");
-        sleep(1);
         goto exit0;
     }
-    kfs_sb = (kfs_superblock_t *) el->ce_mem_ptr;
-
-    ppg = malloc( sizeof( pgcache_t));
-    if( ppg == NULL){
-        TRACE_ERR("malloc error in page cache");
-        rc = -1;
-        goto exit0;
-    }
-
-    memcpy( ppg, &pg_cache, sizeof( pgcache_t));
 
     sb->sb_bdev = fd;
-    sb->sb_extents_cache = (void *) ppg; 
+    sb->sb_extents_cache = (void *) pg_cache; 
     sb->sb_cache_element = (void *) el;
     sb->sb_flags = kfs_sb->sb_flags |= KFS_IS_MOUNTED;
 
@@ -171,8 +165,8 @@ int kfs_mount( kfs_config_t *config, sb_t *sb){
     goto exitOK;
 
 exit0:
-    kfs_pgcache_destroy( &pg_cache);
-    sleep(0);
+    kfs_pgcache_destroy( pg_cache);
+
 exit1:
     close( fd);
 exitOK:
@@ -182,7 +176,8 @@ exitOK:
 
 int kfs_active(){
     sb_t *sb = &__sb;
-
+    pgcache_t *pgcache;
+ 
     if( sb->sb_magic != KFS_MAGIC){
         return( -1);
     }
@@ -191,6 +186,12 @@ int kfs_active(){
         return( -1);
     }
 
+    pgcache = (pgcache_t *) sb->sb_extents_cache;
+
+    if( (pgcache->ca_flags & KFS_PGCACHE_ACTIVE) == 0){
+        return( -1);
+    }
+ 
     return(0);
 }
 
@@ -276,12 +277,43 @@ void kfs_superblock_display(){
            e->ex_block_addr,
            e->ex_block_addr + e->ex_block_size - 1);
 
-
 }
 
+
+int kfs_umount(){
+    sb_t *sb = &__sb;
+    int rc = 0;
+    pgcache_element_t *el;
+    pgcache_t *pgcache;
+
+    if( kfs_active() != 0 ){
+        TRACE_ERR("Superblock is not active");
+        rc = -1;
+    }
+
+    pgcache = (pgcache_t *) sb->sb_extents_cache;
+    el = ( pgcache_element_t *) sb->sb_cache_element; 
+ 
+    sb->sb_flags = sb->sb_flags &~ KFS_IS_MOUNTED;
+    kfs_superblock_update();
+
+    /* wait for the super block to be updated */
+    rc = kfs_pgcache_element_flags_wait( el, KFS_PGCACHE_ND_CLEAN, 10);
+    if( rc != 0){
+        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_CLEAN");
+    }
+
+    kfs_pgcache_destroy( pgcache);
+    close( sb->sb_bdev);
+    memset( &__sb, 0, sizeof( sb_t ));
+
+    return(rc);
+}
+
+    
+
 int kfs_superblock_update(){
-    char *p; 
-    int rc; 
+    pgcache_element_t *el;
     kfs_superblock_t *ksb;
     kfs_extent_t *kex;
     extent_t *ex;
@@ -293,7 +325,8 @@ int kfs_superblock_update(){
         return( -1);
     }
    
-    ksb = (kfs_superblock_t *) p;
+    el = ( pgcache_element_t *) sb->sb_cache_element; 
+    ksb = (kfs_superblock_t *) el->ce_mem_ptr;
 
     if( ksb->sb_magic != KFS_MAGIC){
         TRACE_ERR("Not a KFS file system. Abort.");
@@ -336,30 +369,10 @@ int kfs_superblock_update(){
     ex = &sb->sb_blockmap.bitmap_extent;
     ex_2_kfsex( kex, ex);
 
-
-    block_write( sb->sb_bdev, p, 0);
-    free( p); 
+    kfs_pgcache_element_mark_dirty( el);
+ 
     return(0);
 }
-
-int kfs_superblock_close(){
-    sb_t *sb = &__sb;
-    int rc;
-
-    if( kfs_active() != 0 ){
-        TRACE_ERR("Superblock is not active");
-        return( -1);
-    }
- 
-    sb->sb_flags = sb->sb_flags &~ KFS_IS_MOUNTED;
-    rc = kfs_superblock_update();
-
-    close( sb->sb_bdev);
-    memset( &__sb, 0, sizeof( sb_t ));
-
-    return(rc);
-}
-
 
 
 int kfs_slot_reserve( uint64_t *slot_id ){

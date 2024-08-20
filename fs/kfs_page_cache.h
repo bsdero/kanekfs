@@ -58,7 +58,6 @@ typedef struct{
 
     pthread_mutex_t ca_mutex; 
     uint16_t ca_flags;
-    int ca_nanosec;   /* sleep for N nanosecs */
     int ca_fd;
     pthread_t ca_thread; /* thread */
     pthread_t ca_tid; /* thread id */
@@ -69,7 +68,8 @@ pgcache_element_t *kfs_pgcache_element_map( pgcache_t *cache,
                                             int numblocks, 
                                             uint32_t flags,
                                             void *(*func)(void *)   );
-int kfs_pgcache_alloc( pgcache_t *cache, int fd, int num_elems, int nanosec);
+
+pgcache_t *kfs_pgcache_alloc( int fd, int num_elems);
 int kfs_pgcache_destroy( pgcache_t *cache);
 int kfs_pgcache_start_thread( pgcache_t *cache);
 int kfs_pgcache_element_unmap( pgcache_element_t *ce);

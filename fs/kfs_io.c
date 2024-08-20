@@ -11,8 +11,6 @@
 #include "kfs_io.h"
 #include "kfs_page_cache.h"
 
-sb_t __sb = { 0};
-
 
 /* Cut spaces */
 char *trim (char *s){

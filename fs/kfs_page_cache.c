@@ -111,7 +111,7 @@ void *kfs_pgcache_loop_thread( void *cache_p){
     }while( (cache->ca_flags & KFS_PGCACHE_EVICTED) == 0);
 
 
-    cache->ca_flags &= ~KFS_PGCACHE_ACTIVE;
+    cache->ca_flags = ( KFS_PGCACHE_EXIT_LOOP | KFS_PGCACHE_EVICTED);
 
     TRACE("end");
     pthread_exit( NULL);
@@ -189,33 +189,51 @@ exit0:
 
 
 
-int kfs_pgcache_alloc( pgcache_t *cache, int fd, int num_elems, int nanosec){
+pgcache_t *kfs_pgcache_alloc( int fd, int num_elems){
+    pgcache_t *pgcache;
     void *p;
+
     TRACE("start");
-    memset( (void *) cache, 0, sizeof( pgcache_t));
+
+    
+    pgcache = malloc( sizeof( pgcache_t ));
+    if( pgcache == NULL){
+        TRACE_ERR("Error in malloc()"); 
+        goto exit0;
+    }
+
+    memset( (void *) pgcache, 0, sizeof( pgcache_t));
 
     p = malloc( sizeof( pgcache_element_t) * num_elems);
     if( p == NULL){
         TRACE_ERR("Error in malloc()");
-        return(-1);
+        goto exit1;
     }
 
     memset( p, 0, sizeof( pgcache_element_t) * num_elems);
    
-    cache->ca_elements = p;
-    cache->ca_elements_capacity = num_elems;
-    cache->ca_elements_in_use = 0;
-    cache->ca_nanosec = nanosec;
-    cache->ca_fd = fd;
+    pgcache->ca_elements = p;
+    pgcache->ca_elements_capacity = num_elems;
+    pgcache->ca_elements_in_use = 0;
+    pgcache->ca_fd = fd;
 
-    if (pthread_mutex_init(&cache->ca_mutex, NULL) != 0) { 
+    if (pthread_mutex_init(&pgcache->ca_mutex, NULL) != 0) { 
         TRACE_ERR("mutex init has failed"); 
-        return(-1); 
+        goto exit1; 
     } 
 
-    cache->ca_flags = KFS_PGCACHE_READY;
+    pgcache->ca_flags = KFS_PGCACHE_READY;
+    goto exit0; 
+
+
+exit1:
+    free( pgcache);
+    pgcache = NULL;
+
+exit0:
     TRACE("end");
-    return(0);
+
+    return( pgcache);
 }
 
 
@@ -246,7 +264,7 @@ int kfs_pgcache_start_thread( pgcache_t *cache){
 
 
 int kfs_pgcache_destroy( pgcache_t *cache){
-    int i, rc;
+    int i, rc = 0;
     pgcache_element_t *el;
     void *ret;
     TRACE("start");
@@ -272,7 +290,15 @@ int kfs_pgcache_destroy( pgcache_t *cache){
     cache->ca_flags |= KFS_PGCACHE_EXIT_LOOP;    
     pthread_mutex_unlock( &cache->ca_mutex);
 
+    /* wait for the thread loop to run and remove/sync all the stuff */
+    rc = kfs_pgcache_flags_wait( cache, 
+                                 KFS_PGCACHE_EXIT_LOOP | KFS_PGCACHE_EVICTED, 
+                                 10);
+    if( rc != 0){
+        TRACE_ERR("timeout waiting for flags = 0");
+    }
 
+    /* if we are here the thread should be finished already. */
     if( pthread_equal( cache->ca_thread, cache->ca_tid)){
         pthread_join( cache->ca_thread, &ret);
     }
@@ -280,7 +306,7 @@ int kfs_pgcache_destroy( pgcache_t *cache){
     pthread_mutex_destroy( &cache->ca_mutex);
 
     free( cache->ca_elements);
-    memset( (void *) cache, 0, sizeof( pgcache_t));
+    free( cache);
     TRACE("end");
 
     return(0);

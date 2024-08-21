@@ -8,7 +8,7 @@ CC=cc
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 TESTS=testdict testrand testhash testdh testgc testmap testsizes \
-      test_page_cache
+      test_page_cache test_kfs_mount
 
 TOOLS=kfs_mkfs kfs_info kfs_server
 
@@ -20,9 +20,9 @@ tools: objs $(TOOLS)
 
 
 kfs_info: kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
-	kfs_io.o kfs_page_cache.o
+	kfs_io.o kfs_page_cache.o kfs_super.o
 	$(CC) -o kfs_info kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o  kfs_page_cache.o
+		     map.o kfs_io.o  kfs_page_cache.o kfs_super.o
 
 
 kfs_mkfs: kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
@@ -37,10 +37,11 @@ kfs_server: kfs_server.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
 		     map.o kfs_io.o kfs_page_cache.o
 
 
-kfs_test: kfs_test.o krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o \
-	      kfs_page_cache.o
-	$(CC) -o kfs_test kfs_test.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o kfs_page_cache.o
+test_kfs_mount: test_kfs_mount.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
+	      kfs_io.o kfs_page_cache.o kfs_super.o
+	$(CC) -o test_kfs_mount test_kfs_mount.o krand64.o dict.o hash.o \
+		     dumphex.o gc.o \
+		     map.o kfs_io.o kfs_page_cache.o kfs_super.o
 
 
 

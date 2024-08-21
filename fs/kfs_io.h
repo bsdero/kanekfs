@@ -32,22 +32,6 @@ int extent_write( int fd, char *extent, uint64_t addr, int block_num);
 int kfs_config_read( char *filename, kfs_config_t *conf);
 void kfs_config_display( kfs_config_t *conf);
 
-int kfs_verify( char *filename, int verbose, int extra_verification);
-
-int kfs_open( kfs_config_t *config);
-void kfs_superblock_display();
-int kfs_superblock_update();
-int kfs_superblock_close();
-
-
-int kfs_slot_set_flags( slot_t *slot, uint64_t flags);
-int kfs_slot_set_owners( slot_t *slot, uint64_t sinode, uint64_t edge);
-
-int kfs_slot_get( slot_t *slot);
-int kfs_slot_open( slot_t *slot, uint64_t slot_id);
-int kfs_slot_close( slot_t *slot);
-int kfs_slot_read( slot_t *slot);
-int kfs_slot_update( slot_t *slot);
 
 #endif
 

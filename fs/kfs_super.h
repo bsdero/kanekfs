@@ -19,6 +19,15 @@
 #include "kfs_mem.h"
 
 
+#define kfs_get_sb()                     ( &__sb)
+
+int kfs_verify( char *filename, int verbose, int extra_verification);
+int kfs_load_superblock( kfs_superblock_t *kfs_sb, sb_t *sb);
+int kfs_mount( kfs_config_t *config);
+int kfs_active();
+void kfs_superblock_display();
+int kfs_umount();
+int kfs_superblock_update();
 
 
 /* super block operations */

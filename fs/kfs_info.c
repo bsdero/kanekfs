@@ -11,8 +11,6 @@
 #include <sys/ioctl.h>
 #include <ctype.h>
 #include "kfs.h"
-#include "map.h"
-#include "kfs_io.h"
 
 
 int main( int argc, char **argv){

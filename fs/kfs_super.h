@@ -51,12 +51,9 @@ void kfs_sb_evict_slot( slot_t *slot);
 
 
 /* operations with slots */
-slot_t kfs_slot_alloc();
-slot_t kfs_slot_new();
-slot_t kfs_slot_get( uint64_t slot_id);
-slot_t kfs_slot_get_locked( uint64_t slot_id);
-
-void slot_set_in_use( slot_t *s, int in_use);
+slot_t *kfs_slot_new(); /* reserve a new slot */
+int kfs_slot_get( uint64_t slot_id, slot_t *slot);
+int kfs_slot_get_locked( uint64_t slot_id, slot_t *slot);
 void slot_set_owner_inode( slot_t *s, uint64_t inode);
 void slot_set_owner_inode_edge( slot_t *s, uint64_t inode, uint64_t edge);
 void slot_set_owner_inode_edge_s( slot_t *s, uint64_t inode, char *es);

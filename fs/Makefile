@@ -3,47 +3,52 @@
 
 
 CFLAGS=-Wall -DUSER_SPACE -g -O0 
-LDFLAGS=-fsanitize=address -static-libasan
+LDFLAGS=-lkfs -L.
 CC=cc
+AR=ar
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
+LIBKFS=libkfs.a
+
+
 TESTS=testdict testrand testhash testdh testgc testmap testsizes \
       test_page_cache test_kfs_mount
 
-TOOLS=kfs_mkfs kfs_info kfs_server
+TOOLS=kfs_mkfs kfs_info kfs_server kfs_set_sb_meta
 
 all: tests tools
 
-objs: $(OBJS)
+objs: $(OBJS) $(LIBKFS)
 tests: objs $(TESTS)
 tools: objs $(TOOLS)
 
 
-kfs_info: kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
-	kfs_io.o kfs_page_cache.o kfs_super.o
-	$(CC) -o kfs_info kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o  kfs_page_cache.o kfs_super.o
-
-
-kfs_mkfs: kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
-	kfs_io.o kfs_page_cache.o
-	$(CC) -o kfs_mkfs kfs_mkfs.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o kfs_page_cache.o
-
-
-kfs_server: kfs_server.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
-	kfs_io.o kfs_page_cache.o
-	$(CC) -o kfs_server kfs_server.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o kfs_page_cache.o
-
-
-test_kfs_mount: test_kfs_mount.o krand64.o dict.o hash.o dumphex.o gc.o map.o \
+$(LIBKFS): krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o \
 	      kfs_io.o kfs_page_cache.o kfs_super.o
-	$(CC) -o test_kfs_mount test_kfs_mount.o krand64.o dict.o hash.o \
-		     dumphex.o gc.o \
+	$(AR) -r $(LIBKFS) kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o \
 		     map.o kfs_io.o kfs_page_cache.o kfs_super.o
 
+kfs_info: kfs_info.o $(LIBKFS)
+	$(CC) -o kfs_info kfs_info.o $(LDFLAGS)
 
+
+kfs_mkfs: kfs_mkfs.o $(LIBKFS)
+	$(CC) -o kfs_mkfs kfs_mkfs.o $(LDFLAGS)
+
+
+kfs_server: kfs_server.o $(LIBKFS)
+	$(CC) -o kfs_server kfs_server.o $(LDFLAGS)
+
+kfs_set_sb_meta: kfs_set_sb_meta.o $(LIBKFS)
+	$(CC) -o kfs_set_sb_meta kfs_set_sb_meta.o $(LDFLAGS)
+
+
+
+
+
+# tests
+test_kfs_mount: test_kfs_mount.o $(LIBKFS)
+	$(CC) -o test_kfs_mount test_kfs_mount.o $(LDFLAGS)
 
 testdict: testdict.o hash.o dict.o 
 	$(CC) -o testdict testdict.o hash.o dict.o 
@@ -71,23 +76,11 @@ test_page_cache: test_page_cache.o krand64.o dict.o hash.o dumphex.o gc.o \
 	$(CC) -o test_page_cache test_page_cache.o krand64.o dict.o hash.o \
 		dumphex.o map.o kfs_io.o kfs_page_cache.o gc.o -lpthread
 
-dumphex.o:
-	$(CC) -c dumphex.c $(CFLAGS)
-
-hash.o:
-	$(CC) -c hash.c $(CFLAGS)
-
-gc.o:
-	$(CC) -c gc.c $(CFLAGS)
-
-sizes.o:
-	$(CC) -c sizes.c $(CFLAGS)
-
 clean:
 	@UNAME=`uname|egrep -i "cygwin|windows"`; \
      if [ "$$UNAME" != "" ]; then             \
-	   rm *.o *.exe;                          \
+	   rm *.o *.exe $(LIBKFS);                \
 	 else                                     \
-	   rm *.o $(TESTS) $(TOOLS);              \
+	   rm *.o $(TESTS) $(TOOLS) $(LIBKFS);    \
 	 fi
 

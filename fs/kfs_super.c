@@ -530,7 +530,6 @@ int kfs_active(){
     }
 
     
-    TRACE("sb flags=[0x%x]", sb->sb_flags);
     if( ( sb->sb_flags & KFS_IS_MOUNTED) == 0){
         TRACE_ERR("KFS_IS_MOUNTED flag is not enabled");
         return( -1);
@@ -658,7 +657,7 @@ int kfs_umount(){
     sb->sb_flags = sb->sb_flags &~ KFS_IS_MOUNTED;
 
     kfs_sb = ( kfs_superblock_t *) el->ce_mem_ptr;
-    sb_to_kfssb( sb, kfs_sb);
+    sb_to_kfssb( kfs_sb, sb);
 
     kfs_pgcache_element_mark_dirty( el);
     TRACE("ok1");
@@ -682,7 +681,6 @@ int kfs_umount(){
     
 
 void sb_to_kfssb( kfs_superblock_t *ksb, sb_t *sb){
-    pgcache_element_t *el;
     kfs_extent_t *kex;
     extent_t *ex;
     time_t now;

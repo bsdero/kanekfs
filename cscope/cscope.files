@@ -27,12 +27,14 @@
 ./fs/map.c
 ./fs/map.h
 ./fs/sizes.c
+./fs/slot_cache.h
 ./fs/testdh.c
 ./fs/testdict.c
 ./fs/testgc.c
 ./fs/testhash.c
 ./fs/testmap.c
 ./fs/testrand.c
+./fs/test_kfs_mount.c
 ./fs/test_page_cache.c
 ./fs/trace.c
 ./fs/trace.h

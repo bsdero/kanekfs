@@ -4,8 +4,31 @@
 #include "hash.h"
 #include "dict.h"
 
+char *dict_dt_names[]={ "none" , "int", "uint", "float", "boolean", "string", 
+                        "blob", "extent", NULL };
 
-value_t value_new( unsigned int data_type, void *data, int len){
+char *dict_get_type_name( int dt){
+    if( dt >= 0 || dt < DICT_NUM_TYPES){
+        return( dict_dt_names[dt]);
+    }
+
+    return( NULL);
+}
+
+int dict_get_type_id( char *dt){
+    int i;
+
+    for( i = 0; i < DICT_NUM_TYPES; i++){
+        if( strncmp( dict_dt_names[i], dt, 8) == 0){
+            return( i);
+        }
+    }
+
+    return( -1);
+}
+
+
+value_t dict_value_new( unsigned int data_type, void *data, int len){
     value_t v;
     char c;
 

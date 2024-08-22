@@ -27,6 +27,9 @@ typedef struct{
 #define DICT_STRING                                5
 #define DICT_BLOB                                  6
 #define DICT_EXTENT                                7
+
+#define DICT_NUM_TYPES                             8
+
 #define DICT_MAX_STRLEN                            250
 
     /* For the data types DICT_BLOB and DICT_EXTENT data should be stored in 
@@ -36,6 +39,7 @@ typedef struct{
     uint32_t data_len;
     value_u value;
 }value_t;
+
 
 
 typedef struct{
@@ -52,7 +56,7 @@ typedef struct{
 }dict_t; 
 
 
-value_t value_new( unsigned int data_type, void *data, int len);
+value_t dict_value_new( unsigned int data_type, void *data, int len);
 dict_t dict_new();
 void dict_init( dict_t *d);
 int dict_add_entry( dict_t *d, char *key, value_t value);
@@ -61,6 +65,9 @@ dict_entry_t *dict_search_entry( dict_t *d, char *key, int *sub);
 int dict_update_entry( dict_t *d, char *key, value_t new_value);
 void dict_clean( dict_t *d);
 void dict_display( dict_t *d);
+
+int dict_get_type_id( char *dt);
+char *dict_get_type_name( int dt);
 
 #endif
 

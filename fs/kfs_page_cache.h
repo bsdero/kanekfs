@@ -4,17 +4,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include "trace.h"
-
-#define KFS_PGCACHE_ND_ACTIVE      0x0001 /* has this element valid data? */
-#define KFS_PGCACHE_ND_DIRTY       0x0002 /* dirty? should we sync? */
-#define KFS_PGCACHE_ND_EVICT       0x0004 /* remove and free memory */
-#define KFS_PGCACHE_ND_PINNED      0x0008 /* dont remove this from cache */
-#define KFS_PGCACHE_ND_FORCE_MAP   0x0010 /* evict LRU cache element and 
-                                                put this one on place */
-#define KFS_PGCACHE_ND_CLEAN       0x0020 /* this flag should be enabled only
-                                             if the node is active and NOT
-                                             dirty */
-#define KFS_PGCACHE_MASK           0x00ff 
+#include "cache.h"
 
 typedef struct{
     uint64_t ce_flags;
@@ -35,26 +25,6 @@ typedef struct{
     /* number of elements in use and total */
     uint32_t ca_elements_in_use;
     uint32_t ca_elements_capacity;
-
-
-#define KFS_PGCACHE_READY          0x01 /* read flag. If enabled,
-                                           the cache is ready for run */
-#define KFS_PGCACHE_ACTIVE         0x02 /* read flag. if enabled, 
-                                         * processing loop may run any 
-                                         * time */
-#define KFS_PGCACHE_ON_LOOP        0x04 /* read flag, if enabled 
-                                         * the processing loop is 
-                                         * running */
-#define KFS_PGCACHE_FLUSH          0x08 /* set this for flush all the
-                                           buffers in cache */
-#define KFS_PGCACHE_PAUSE_LOOP     0x10 /* set this for pause the loop,
-                                           clear it for un pause */
-
-#define KFS_PGCACHE_EXIT_LOOP      0x20 /* set this for exit the loop
-                                           flush out buffers, and 
-                                           evict all */
-#define KFS_PGCACHE_EVICTED        0x40 /* if enabled, eveything has 
-                                           been evicted, out now */
 
     pthread_mutex_t ca_mutex; 
     uint16_t ca_flags;

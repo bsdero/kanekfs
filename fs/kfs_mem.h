@@ -157,10 +157,10 @@ typedef struct{
 
     /* extents cache and cached super block */
     void *sb_page_cache;
-    void *sb_superbloch_pgcache_element;
-    void *slot_cache;
-    void *inode_cache;
-    void *graph_cache;
+    void *sb_superblock_page;
+    void *sb_slot_cache;
+    void *sb_inode_cache;
+    void *sb_graph_cache;
 
     /* super inodes capacity, used inodes, cache, and extents */
     si_table_t sb_si_table;

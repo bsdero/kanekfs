@@ -22,6 +22,15 @@ objs: $(OBJS) $(LIBKFS)
 tests: objs $(TESTS)
 tools: objs $(TOOLS)
 
+runtests: all 
+	@echo "MKFS TESTS ";                 \
+	./kfs_mkfs -s 50M  kfs_50M;          \
+	./kfs_mkfs -s 200M kfs_200M;         \
+	./kfs_mkfs -s 1G   kfs_1G;           \
+	./kfs_info ./kfs_50M;                \
+	./kfs_info ./kfs_200M;               \
+	./kfs_info ./kfs_1G
+
 
 $(LIBKFS): krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o \
 	      kfs_io.o kfs_page_cache.o kfs_super.o

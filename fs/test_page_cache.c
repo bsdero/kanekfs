@@ -46,9 +46,9 @@ int main( int argc, char **argv){
         return( -1);
     }
     
-    rc = kfs_pgcache_flags_wait( cache, KFS_PGCACHE_ACTIVE, 10);
+    rc = kfs_pgcache_flags_wait( cache, KFS_CACHE_ACTIVE, 10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ACTIVE");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ACTIVE");
         close( fd);
         return( -1);
     }
@@ -63,10 +63,10 @@ int main( int argc, char **argv){
 
 
     rc = kfs_pgcache_element_flags_wait( el, 
-                                         KFS_PGCACHE_ND_ACTIVE, 
+                                         KFS_CACHE_ND_ACTIVE, 
                                          10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_ACTIVE");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ND_ACTIVE");
         close( fd);
         return( -1);
     }
@@ -74,10 +74,10 @@ int main( int argc, char **argv){
     strcpy( (char *) el->ce_mem_ptr, s1);
     kfs_pgcache_element_mark_dirty( el);
     rc = kfs_pgcache_element_flags_wait( el, 
-                                         KFS_PGCACHE_ND_CLEAN, 
+                                         KFS_CACHE_ND_CLEAN, 
                                          10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_CLEAN");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ND_CLEAN");
         close( fd);
         return( -1);
     }
@@ -90,10 +90,10 @@ int main( int argc, char **argv){
         return( -1);
     }
     rc = kfs_pgcache_element_flags_wait( el2, 
-                                        KFS_PGCACHE_ND_ACTIVE, 
+                                        KFS_CACHE_ND_ACTIVE, 
                                         10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_ACTIVE");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ND_ACTIVE");
         close( fd);
         return( -1);
     }
@@ -103,16 +103,16 @@ int main( int argc, char **argv){
     strcpy( (char *) el2->ce_mem_ptr, s1);
     kfs_pgcache_element_mark_dirty( el2);
 
-    rc = kfs_pgcache_element_flags_wait( el, KFS_PGCACHE_ND_CLEAN, 10);
+    rc = kfs_pgcache_element_flags_wait( el, KFS_CACHE_ND_CLEAN, 10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_CLEAN");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ND_CLEAN");
         close( fd);
         return( -1);
     }
 
-   rc = kfs_pgcache_element_flags_wait( el2, KFS_PGCACHE_ND_CLEAN, 10);
+   rc = kfs_pgcache_element_flags_wait( el2, KFS_CACHE_ND_CLEAN, 10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_CLEAN");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ND_CLEAN");
         close( fd);
         return( -1);
     }

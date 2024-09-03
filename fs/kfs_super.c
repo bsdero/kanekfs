@@ -460,9 +460,9 @@ int kfs_mount( kfs_config_t *config){
         goto exit0;
     }
 
-    rc = kfs_pgcache_flags_wait( pg_cache, KFS_PGCACHE_ACTIVE, 10);
+    rc = kfs_pgcache_flags_wait( pg_cache, KFS_CACHE_ACTIVE, 10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ACTIVE");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ACTIVE");
         goto exit0;
     }
 
@@ -474,9 +474,9 @@ int kfs_mount( kfs_config_t *config){
         goto exit0;
     }
 
-    rc = kfs_pgcache_element_flags_wait( el, KFS_PGCACHE_ND_ACTIVE, 10);
+    rc = kfs_pgcache_element_flags_wait( el, KFS_CACHE_ND_ACTIVE, 10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_ACTIVE");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ND_ACTIVE");
         goto exit0;
     }
 
@@ -484,8 +484,8 @@ int kfs_mount( kfs_config_t *config){
     kfssb_to_sb( sb, kfs_sb);
 
     sb->sb_bdev = fd;
-    sb->sb_extents_cache = (void *) pg_cache; 
-    sb->sb_cache_element = (void *) el;
+    sb->sb_page_cache = (void *) pg_cache; 
+    sb->sb_superblock_page = (void *) el;
     sb->sb_flags = kfs_sb->sb_flags |= KFS_IS_MOUNTED;
 
     now = time(NULL);
@@ -495,9 +495,9 @@ int kfs_mount( kfs_config_t *config){
     kfs_pgcache_element_mark_dirty( el);
 
     /* wait for the KFS superblock flush and make it active */
-    rc = kfs_pgcache_element_flags_wait( el, KFS_PGCACHE_ND_CLEAN, 10);
+    rc = kfs_pgcache_element_flags_wait( el, KFS_CACHE_ND_CLEAN, 10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_CLEAN");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ND_CLEAN");
         close( fd);
         return( -1);
     }
@@ -535,11 +535,11 @@ int kfs_active(){
         return( -1);
     }
 
-    pgcache = (pgcache_t *) sb->sb_extents_cache;
+    pgcache = (pgcache_t *) sb->sb_page_cache;
 
 
     TRACE("cache flags=[0x%x]", pgcache->ca_flags);
-    if( (pgcache->ca_flags & KFS_PGCACHE_ACTIVE) == 0){
+    if( (pgcache->ca_flags & KFS_CACHE_ACTIVE) == 0){
         TRACE_ERR("Page Cache is not active");
         return( -1);
     }
@@ -651,8 +651,8 @@ int kfs_umount(){
         rc = -1;
     }
 
-    pgcache = (pgcache_t *) sb->sb_extents_cache;
-    el = ( pgcache_element_t *) sb->sb_cache_element; 
+    pgcache = (pgcache_t *) sb->sb_page_cache;
+    el = ( pgcache_element_t *) sb->sb_superblock_page; 
  
     sb->sb_flags = sb->sb_flags &~ KFS_IS_MOUNTED;
 
@@ -663,9 +663,9 @@ int kfs_umount(){
     TRACE("ok1");
 
     /* wait for the super block to be updated */
-    rc = kfs_pgcache_element_flags_wait( el, KFS_PGCACHE_ND_CLEAN, 10);
+    rc = kfs_pgcache_element_flags_wait( el, KFS_CACHE_ND_CLEAN, 10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_PGCACHE_ND_CLEAN");
+        TRACE_ERR("timeout waiting for KFS_CACHE_ND_CLEAN");
     }
 
 

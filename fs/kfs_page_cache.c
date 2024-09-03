@@ -37,13 +37,13 @@ void *kfs_pgcache_loop_thread( void *cache_p){
 
     TRACE("start");
     cache->ca_tid = pthread_self();
-    cache->ca_flags |= KFS_PGCACHE_ACTIVE;
+    cache->ca_flags |= KFS_CACHE_ACTIVE;
     request.tv_sec = 0;
     request.tv_nsec = nsec;
 
 
     do{
-        if( cache->ca_flags & KFS_PGCACHE_PAUSE_LOOP){
+        if( cache->ca_flags & KFS_CACHE_PAUSE_LOOP){
             request.tv_nsec = 0;
             request.tv_sec = 1;  /* pause for one second */
             nanosleep( &request, &remaining);
@@ -53,12 +53,12 @@ void *kfs_pgcache_loop_thread( void *cache_p){
         }
  
         pthread_mutex_lock( &cache->ca_mutex);
-        cache->ca_flags |= KFS_PGCACHE_ON_LOOP;
+        cache->ca_flags |= KFS_CACHE_ON_LOOP;
         for( i = 0; i < cache->ca_elements_capacity; i++){
             el = &cache->ca_elements[i];
             flags = el->ce_flags;
 
-            if((flags & KFS_PGCACHE_ND_ACTIVE) == 0){
+            if((flags & KFS_CACHE_ND_ACTIVE) == 0){
                 continue;
             }
 
@@ -67,7 +67,7 @@ void *kfs_pgcache_loop_thread( void *cache_p){
                 continue;
             }
 
-            if( (flags & KFS_PGCACHE_ND_DIRTY) != 0){
+            if( (flags & KFS_CACHE_ND_DIRTY) != 0){
                 el->ce_count++;
                 rc = extent_write( cache->ca_fd, 
                                    el->ce_mem_ptr, 
@@ -76,12 +76,12 @@ void *kfs_pgcache_loop_thread( void *cache_p){
                 if( rc != 0){
                     TRACE_ERR("extent write error");
                 }else{
-                    el->ce_flags &= ~KFS_PGCACHE_ND_DIRTY;
-                    el->ce_flags |= KFS_PGCACHE_ND_CLEAN;
+                    el->ce_flags &= ~KFS_CACHE_ND_DIRTY;
+                    el->ce_flags |= KFS_CACHE_ND_CLEAN;
                 }
                 TRACE("flushed out");
             }
-            if( (flags & KFS_PGCACHE_ND_EVICT) != 0){
+            if( (flags & KFS_CACHE_ND_EVICT) != 0){
                 if( el->ce_on_unmap_callback != NULL){
                     arg_res = (void *) &rc; 
                     arg_res = el->ce_on_unmap_callback( ( void *) el );
@@ -101,17 +101,17 @@ void *kfs_pgcache_loop_thread( void *cache_p){
             }
         }
 
-        cache->ca_flags &= ~KFS_PGCACHE_ON_LOOP;
-        if( (cache->ca_flags & KFS_PGCACHE_EXIT_LOOP) != 0){
-            cache->ca_flags |= KFS_PGCACHE_EVICTED;
+        cache->ca_flags &= ~KFS_CACHE_ON_LOOP;
+        if( (cache->ca_flags & KFS_CACHE_EXIT_LOOP) != 0){
+            cache->ca_flags |= KFS_CACHE_EVICTED;
         }
         pthread_mutex_unlock( &cache->ca_mutex);
         nanosleep( &request, &remaining);
 
-    }while( (cache->ca_flags & KFS_PGCACHE_EVICTED) == 0);
+    }while( (cache->ca_flags & KFS_CACHE_EVICTED) == 0);
 
 
-    cache->ca_flags = ( KFS_PGCACHE_EXIT_LOOP | KFS_PGCACHE_EVICTED);
+    cache->ca_flags = ( KFS_CACHE_EXIT_LOOP | KFS_CACHE_EVICTED);
 
     TRACE("end");
     pthread_exit( NULL);
@@ -137,7 +137,7 @@ pgcache_element_t *kfs_pgcache_element_map( pgcache_t *cache,
     for( i = 0; i < cache->ca_elements_capacity; i++){
         el = &cache->ca_elements[i];
 
-        if( (el->ce_flags & KFS_PGCACHE_ND_ACTIVE) != 0){
+        if( (el->ce_flags & KFS_CACHE_ND_ACTIVE) != 0){
             continue;
         }
 
@@ -171,7 +171,7 @@ pgcache_element_t *kfs_pgcache_element_map( pgcache_t *cache,
 
         el->ce_block_addr = addr;
         el->ce_num_blocks = numblocks;
-        el->ce_flags = flags | KFS_PGCACHE_ND_ACTIVE | KFS_PGCACHE_ND_CLEAN;
+        el->ce_flags = flags | KFS_CACHE_ND_ACTIVE | KFS_CACHE_ND_CLEAN;
         el->ce_on_unmap_callback = func;
         el->ce_count = 1;
  
@@ -222,7 +222,7 @@ pgcache_t *kfs_pgcache_alloc( int fd, int num_elems){
         goto exit1; 
     } 
 
-    pgcache->ca_flags = KFS_PGCACHE_READY;
+    pgcache->ca_flags = KFS_CACHE_READY;
     goto exit0; 
 
 
@@ -243,7 +243,7 @@ int kfs_pgcache_start_thread( pgcache_t *cache){
 
     TRACE("start");
 
-    if( (cache->ca_flags & KFS_PGCACHE_READY) == 0){
+    if( (cache->ca_flags & KFS_CACHE_READY) == 0){
         TRACE_ERR("cache is not ready, abort");
         return(-1);
     }
@@ -268,7 +268,7 @@ int kfs_pgcache_destroy( pgcache_t *cache){
     pgcache_element_t *el;
     void *ret;
     TRACE("start");
-    if( (cache->ca_flags & KFS_PGCACHE_READY) == 0){
+    if( (cache->ca_flags & KFS_CACHE_READY) == 0){
         TRACE_ERR("cache is not ready, abort");
         return(-1);
     }
@@ -278,7 +278,7 @@ int kfs_pgcache_destroy( pgcache_t *cache){
     for( i = 0; i < cache->ca_elements_capacity; i++){
         el = &cache->ca_elements[i];
 
-        if((el->ce_flags & KFS_PGCACHE_ND_ACTIVE) == 0){
+        if((el->ce_flags & KFS_CACHE_ND_ACTIVE) == 0){
             continue;
         }
         rc = kfs_pgcache_element_unmap( el);
@@ -287,12 +287,12 @@ int kfs_pgcache_destroy( pgcache_t *cache){
         }
     }
     
-    cache->ca_flags |= KFS_PGCACHE_EXIT_LOOP;    
+    cache->ca_flags |= KFS_CACHE_EXIT_LOOP;    
     pthread_mutex_unlock( &cache->ca_mutex);
 
     /* wait for the thread loop to run and remove/sync all the stuff */
     rc = kfs_pgcache_flags_wait( cache, 
-                                 KFS_PGCACHE_EXIT_LOOP | KFS_PGCACHE_EVICTED, 
+                                 KFS_CACHE_EXIT_LOOP | KFS_CACHE_EVICTED, 
                                  10);
     if( rc != 0){
         TRACE_ERR("timeout waiting for flags = 0");
@@ -315,14 +315,14 @@ int kfs_pgcache_destroy( pgcache_t *cache){
 
 int kfs_pgcache_element_unmap( pgcache_element_t *ce){
     TRACE("start");
-    if(( ce->ce_flags & KFS_PGCACHE_ND_ACTIVE) == 0){
+    if(( ce->ce_flags & KFS_CACHE_ND_ACTIVE) == 0){
         TRACE_ERR("cache element not active");
         return(-1);
     }
 
 
     pthread_mutex_lock( &ce->ce_mutex);
-    ce->ce_flags |= KFS_PGCACHE_ND_EVICT;
+    ce->ce_flags |= KFS_CACHE_ND_EVICT;
     pthread_mutex_unlock( &ce->ce_mutex);
     TRACE("end");
     return(0);
@@ -331,15 +331,15 @@ int kfs_pgcache_element_unmap( pgcache_element_t *ce){
 
 int kfs_pgcache_element_mark_dirty( pgcache_element_t *ce){
     TRACE("start");
-    if(( ce->ce_flags & KFS_PGCACHE_ND_ACTIVE) == 0){
+    if(( ce->ce_flags & KFS_CACHE_ND_ACTIVE) == 0){
         TRACE_ERR("cache element not active");
         return(-1);
     }
 
 
     pthread_mutex_lock( &ce->ce_mutex);
-    ce->ce_flags |= KFS_PGCACHE_ND_DIRTY;
-    ce->ce_flags &= ~KFS_PGCACHE_ND_CLEAN;
+    ce->ce_flags |= KFS_CACHE_ND_DIRTY;
+    ce->ce_flags &= ~KFS_CACHE_ND_CLEAN;
     pthread_mutex_unlock( &ce->ce_mutex);
     TRACE("end");
     return(0);
@@ -350,7 +350,7 @@ int kfs_pgcache_sync( pgcache_t *cache){
     int i, rc;
     pgcache_element_t *el;
     TRACE("start");
-    if( (cache->ca_flags & KFS_PGCACHE_READY) == 0){
+    if( (cache->ca_flags & KFS_CACHE_READY) == 0){
         TRACE_ERR("cache is not ready, abort");
         return(-1);
     }
@@ -359,7 +359,7 @@ int kfs_pgcache_sync( pgcache_t *cache){
     for( i = 0; i < cache->ca_elements_capacity; i++){
         el = &cache->ca_elements[i];
 
-        if((el->ce_flags & KFS_PGCACHE_ND_ACTIVE) == 0){
+        if((el->ce_flags & KFS_CACHE_ND_ACTIVE) == 0){
             continue;
         }
         rc = kfs_pgcache_element_unmap( el);

@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include "trace.h"
-#include "kfs.h"
+#include "cache.h"
 
 /* For the slots the next operations can be done: 
  *
@@ -40,42 +40,46 @@
  * evict           -update dict index, blank dict extent, mark both as dirty
  *                 -update number of available slots in superblock, and put it
  *                 -update slot map and block map
+ *
+ *
  */
 
 typedef struct{
     uint64_t sce_flags;
-    pgcache_element_t *sce_index;
-    pgcache_element_t *sce_extent;
+    pgcache_element_t *sce_index;  /* cached page to slot index */
+    pgcache_element_t *sce_extent; /* cached page to slot extent */
     pthread_mutex_t sce_mutex;
     slot_t sce_slot;
-}slot_cache_element_t;
+}slotcache_element_t;
 
 
 /* generic cache structure */
 typedef struct{
     /* pointer to the elements array */
+    slotcache_element_t *sc_elements; 
+
     pgcache_element_t *sc_slot_map;     /* cached page to the slot map */
     sb_t *sc_sb;                        /* superblock */
     /* number of elements in use and total */
-    uint32_t sc_in_use;
-    uint32_t sc_capacity;
+    uint32_t sc_elements_in_use;
+    uint32_t sc_elements_capacity;
     pthread_mutex_t sc_mutex; 
     uint16_t sc_flags;
     pthread_t sc_thread; /* thread */
     pthread_t sc_tid; /* thread id */
-}slot_cache_t;
+}slotcache_t;
 
+/* slot cache and slot cache elements operations */
+slotcache_t *kfs_slotcache_alloc( sb_t *sb, int num_elems);
+int kfs_slotcache_destroy( slotcache_t *slotcache);
+int kfs_slotcache_start_thread( slotcache_t *slotcache);
 
-pgcache_t *kfs_slotcache_alloc( sb_t *sb, int num_elems);
-int kfs_slotcache_destroy( pgcache_t *cache);
-int kfs_slotcache_start_thread( pgcache_t *cache);
+slotcache_element_t *kfs_slotce_new( slotcache_t *sce); 
+slotcache_element_t *kfs_slotce_get( slotcache_t *sce, uint64_t slot_id); 
+int kfs_slotce_evict( slotcache_element_t *sce);
+int kfs_slotce_put( slotcache_element_t *sce);
+int kfs_slotce_sync( slotcache_t *sce);
 
-slot_cache_element_t *kfs_slot_cel_new( pgcache_t *slotcache); 
-slot_cache_element_t *kfs_slot_cel_get( pgcache_t *slotcache, 
-                                        uint64_t slot_id); 
-int kfs_slot_cel_evict( slot_cache_element_t *sce);
-int kfs_slot_cel_put( slot_cache_element_t *sce);
-int kfs_slot_cel_sync( pgcache_t *cache);
 
 
 #endif

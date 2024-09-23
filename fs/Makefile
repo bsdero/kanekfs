@@ -32,6 +32,9 @@ runtests: all
 	./kfs_info ./kfs_1G
 
 
+testclean:
+	rm -rf 
+
 $(LIBKFS): krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o \
 	      kfs_io.o kfs_page_cache.o kfs_super.o
 	$(AR) -r $(LIBKFS) kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o \

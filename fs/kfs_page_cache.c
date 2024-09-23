@@ -8,23 +8,6 @@
 #include "kfs_page_cache.h"
 #include "kfs_io.h"
 
-/* 1000000000 nanosecs == 1 second. */
-#define NANOSECS_DELAY                   100000000ul
-#define MILISECS_PER_SECOND              1000000000ul
-
-
-#ifndef timespecsub
-#define	timespecsub(tsp, usp, vsp)					\
-	do {								\
-		(vsp)->tv_sec = (tsp)->tv_sec - (usp)->tv_sec;		\
-		(vsp)->tv_nsec = (tsp)->tv_nsec - (usp)->tv_nsec;	\
-		if ((vsp)->tv_nsec < 0) {				\
-			(vsp)->tv_sec--;				\
-			(vsp)->tv_nsec += 1000000000L;			\
-		}							\
-	} while (0)
-#endif
-
 
 void *kfs_pgcache_loop_thread( void *cache_p){
     pgcache_t *cache = ( pgcache_t *) cache_p;

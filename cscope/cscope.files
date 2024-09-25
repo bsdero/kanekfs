@@ -15,6 +15,7 @@
 ./fs/hash.h
 ./fs/krand64.h
 ./fs/testrand.c
+./fs/kfs_slot_cache.c
 ./fs/list.h
 ./fs/trace.h
 ./fs/kfs_io.c

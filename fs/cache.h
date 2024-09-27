@@ -1,6 +1,11 @@
 #ifndef _CACHE_H_
 #define _CACHE_H_
 
+
+#include <sys/time.h>
+#include <stdint.h>
+
+
 /* 1000000000 nanosecs == 1 second. */
 #define NANOSECS_DELAY                   100000000ul
 #define MILISECS_PER_SECOND              1000000000ul
@@ -52,8 +57,29 @@
                                            evict all */
 #define KFS_CACHE_EVICTED          0x40 /* if enabled, eveything has 
                                            been evicted, out now */
+/* element in cache */
+typedef struct{
+    uint64_t ca_id;  /* id element cache */
+    pthread_mutex_t ca_mutex;  /* 
+    void *(*ca_on_map_callback)(void *);
+    void *(*ca_on_evict_callback)(void *);
+    void *(*ca_on_flush_callback)(void *);
+    uint64_t ca_flags;
+    uint64_t ca_access_count;
+}cache_element_t;
 
+typedef struct{
+    void **ptr_elements;
+    
+    /* number of elements in use and total */
+    uint32_t ca_elements_in_use;
+    uint32_t ca_elements_capacity;
 
+    pthread_mutex_t ca_mutex; 
+    uint16_t ca_flags;
+    int ca_fd;
+    pthread_t ca_thread; /* thread */
+    pthread_t ca_tid; /* thread id */
 
 #endif
 

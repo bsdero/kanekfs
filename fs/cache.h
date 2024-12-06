@@ -60,8 +60,7 @@
 /* element in cache */
 typedef struct{
     uint64_t ca_id;  /* id element cache */
-    pthread_mutex_t ca_mutex;  /* 
-    void *(*ca_on_map_callback)(void *);
+    pthread_mutex_t ca_mutex;  /* mutex */ 
     void *(*ca_on_evict_callback)(void *);
     void *(*ca_on_flush_callback)(void *);
     uint64_t ca_flags;
@@ -69,17 +68,25 @@ typedef struct{
 }cache_element_t;
 
 typedef struct{
-    void **ptr_elements;
+    void *ptr_elements;
     
     /* number of elements in use and total */
-    uint32_t ca_elements_in_use;
-    uint32_t ca_elements_capacity;
+    uint32_t num_elements;
 
     pthread_mutex_t ca_mutex; 
     uint16_t ca_flags;
-    int ca_fd;
     pthread_t ca_thread; /* thread */
     pthread_t ca_tid; /* thread id */
+}cache_list_t;
+
+typedef struct{
+    cache_list_t available;
+    cache_list_t used;
+    cache_list_t dirty;
+
+
+    uint32_t ca_elements_capacity;
+}cache_t;
 
 #endif
 

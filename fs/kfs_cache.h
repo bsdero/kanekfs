@@ -61,32 +61,20 @@
                                        * elements, clean all except pinned
                                        * elements. */
 
-#define CACHE_FLUSH            0x0008 /* write flag for flush all the
+#define CACHE_FLUSH            0x0008 /* set this for flush all the
                                          buffers in cache */
 
-#define CACHE_PAUSE            0x0010 /* write flag for pause the loops,
+#define CACHE_PAUSE_LOOP       0x0010 /* set this for pause the loops,
                                          clear it for unpause */
 
-#define CACHE_EXIT             0x0020 /* write flag for exit the loop
+#define CACHE_EXIT_LOOP        0x0020 /* set this for exit the loop
                                          flush out buffers, and 
                                          evict all */
 
 #define CACHE_ON_LOOP          0x0040 /* read flag, this signals the loop
                                          is running */
 
-#define CACHE_EVICTED          0x0080   /* read flag, the list has been 
-                                           evicted */
-
-#define CACHE_SET_LOOP_DONE    0x0100   /* write flag. Set it and wait for a
-                                           cache loop to complete, read the
-                                           CACHE_LOOP_DONE. */
-
-#define CACHE_LOOP_DONE        0x0200   /* read flag. Only is set to 1 when the
-                                           flag CACHE_SET_LOOP_DONE is enabled
-                                           and a cache loop is complete. Set
-                                           both flags CACHE_SET_LOOP_DONE and
-                                           CACHE_LOOP_DONE to zero when 
-                                           acknowledgement */
+#define CACHE_EVICTED          0x0080   /* the list has been evicted */
 
 
 /* each element in cache.
@@ -104,17 +92,17 @@ typedef struct{
 typedef struct{
 
     /* pointer to an array of pointers to the cache elements. */
-    cache_element_t **ca_elements_ptr;
-    cache_element_t **ca_dirty_elements_ptr;
+    cache_element_t *ca_elements_ptr;
     
     /* number of elements in use and total */
     uint32_t ca_elements_in_use;
     uint32_t ca_elements_capacity;
-    uint32_t ca_flags;
 
     /* mutex for this specific cache */
     pthread_mutex_t ca_mutex;
-    pthread_t ca_thread, ca_tid; /* thread */
+    uint16_t ca_flags;
+    pthread_t ca_thread; /* thread */
+    pthread_t ca_tid; /* thread id */
 
     /* pointer to functions which will be executed when something
      * happens to a cache element. The argument should be a pointer
@@ -142,26 +130,25 @@ cache_t *cache_alloc( int elements_capacity,
 int cache_run( cache_t *cache);
 
 /* enable the specified flag. Only write flags are allowed */
-int cache_set_flags( cache_t *cache, uint32_t flag_to_enable);
-int cache_clear_loop_done( cache_t *cache);
+int cache_set_flag( cache_t *cache, uint16_t flag_to_enable);
 int cache_destroy( cache_t *cache);
 int cache_sync( cache_t *cache);
 int cache_pause( cache_t *cache);
-int cache_clear_pause( cache_t *cache);
-int cache_wait_for_flags( cache_t *cache, uint32_t flags, int timeout_secs);
+int cache_wait_for_flag( cache_t *cache, uint32_t flags, int timeout_secs);
+int cache_stop( cache_t *cache);
 cache_element_t *cache_lookup( cache_t *cache, uint64_t key);
  
 
 cache_element_t *cache_element_map( cache_t *cache, size_t byte_size);
-int cache_element_mark_eviction( cache_element_t *ce);
-int cache_element_mark_dirty( cache_element_t *ce);
+int cache_element_unmap( cache_element_t *ce);
+int cache_element_flush( cache_element_t *ce);
 int cache_element_set_flag( cache_element_t *ce);
 int cache_element_pin( cache_element_t *ce);
 int cache_element_set_active( cache_element_t *ce);
 int cache_element_un_pin( cache_element_t *ce);
-int cache_element_wait_for_flags( cache_element_t *ce, 
-                                  uint32_t flags, 
-                                  int timeout_secs);
+int cache_element_wait_for_flag( cache_element_t *ce, 
+                                     uint32_t flags, 
+                                     int timeout_secs);
 
 #endif
 

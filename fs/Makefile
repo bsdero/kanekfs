@@ -35,10 +35,10 @@ runtests: all
 testclean:
 	rm -rf 
 
-$(LIBKFS): krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o \
-	      kfs_io.o kfs_page_cache.o kfs_super.o
+$(LIBKFS): krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o cache.o \
+	      kfs_io.o kfs_page_cache.o kfs_super.o 
 	$(AR) -r $(LIBKFS) kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o \
-		     map.o kfs_io.o kfs_page_cache.o kfs_super.o
+		     map.o kfs_io.o kfs_page_cache.o kfs_super.o cache.o
 
 kfs_info: kfs_info.o $(LIBKFS)
 	$(CC) -o kfs_info kfs_info.o $(LDFLAGS)
@@ -82,6 +82,9 @@ testmap: testmap.o map.o
 
 testsizes: sizes.o
 	$(CC) -o testsizes sizes.o
+
+testcache: testcache.o cache.o
+	$(CC) -o testcache testcache.o cache.o 
 
 test_page_cache: test_page_cache.o krand64.o dict.o hash.o dumphex.o gc.o \
 	        kfs_io.o kfs_page_cache.o map.o

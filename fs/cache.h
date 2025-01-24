@@ -40,7 +40,7 @@
                                          will be removed and free its 
                                          memory */
 
-#define CACHE_EL_PINNED        0x0008 /* write flag, set this for
+#define CACHE_EL_PIN           0x0008 /* write flag, set this for
                                          not remove this from cache on 
                                          LRU removal */
 
@@ -49,6 +49,8 @@
                                          dirty */
 #define CACHE_EL_MASK          0x00ff 
 
+
+#define CACHE_EL_DATAPTR(x)    ((void *)(&((cache_element_t*)x)[1]))
 
 
 /* generic flags for cache thread loop */
@@ -88,6 +90,7 @@
                                            CACHE_LOOP_DONE to zero when 
                                            acknowledgement */
 
+#define CACHE_EL_ADD_COUNT(x)  (((cache_element_t *)x)->ce_access_count++)
 
 /* each element in cache.
  *
@@ -141,8 +144,6 @@ cache_t *cache_alloc( int elements_capacity,
 /* start the cache thread */
 int cache_run( cache_t *cache);
 
-/* enable the specified flag. Only write flags are allowed */
-int cache_set_flags( cache_t *cache, uint32_t flag_to_enable);
 int cache_clear_loop_done( cache_t *cache);
 int cache_destroy( cache_t *cache);
 int cache_sync( cache_t *cache);
@@ -150,14 +151,12 @@ int cache_pause( cache_t *cache);
 int cache_clear_pause( cache_t *cache);
 int cache_wait_for_flags( cache_t *cache, uint32_t flags, int timeout_secs);
 cache_element_t *cache_lookup( cache_t *cache, uint64_t key);
- 
+
 
 cache_element_t *cache_element_map( cache_t *cache, size_t byte_size);
 int cache_element_mark_eviction( cache_element_t *ce);
 int cache_element_mark_dirty( cache_element_t *ce);
-int cache_element_set_flag( cache_element_t *ce);
 int cache_element_pin( cache_element_t *ce);
-int cache_element_set_active( cache_element_t *ce);
 int cache_element_un_pin( cache_element_t *ce);
 int cache_element_wait_for_flags( cache_element_t *ce, 
                                   uint32_t flags, 

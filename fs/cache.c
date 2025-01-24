@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <limits.h>
+#include <signal.h>
+#include <unistd.h>
 #include "trace.h"
 #include "cache.h"
 
@@ -17,7 +19,8 @@ void *cache_thread( void *cache_p){
     void *arg_res; 
     cache_element_t *el;
     uint32_t flags;
-    uint64_t nsec = 100000000L; /*     1/10th of second */
+    //uint64_t nsec = 100000000L; /*     1/10th of second */
+    uint64_t nsec =   5000000000L; /* 5 seconds */
 
     TRACE("start");
     cache->ca_tid = pthread_self();
@@ -60,7 +63,7 @@ void *cache_thread( void *cache_p){
                 }
 
                 if( (flags & CACHE_EL_DIRTY) != 0){
-                    el->ce_access_count++;
+                    CACHE_EL_ADD_COUNT(el);
                     if( cache->ca_on_flush_callback != NULL){
                         arg_res = (void *) &rc;
                         arg_res = cache->ca_on_flush_callback( (void *) el);
@@ -79,6 +82,7 @@ void *cache_thread( void *cache_p){
                 }
 
                 if( (flags & CACHE_EL_EVICT) != 0){
+                    TRACE("real eviction start");
                     if( cache->ca_on_evict_callback != NULL){
                         arg_res = (void *) &rc; 
                         arg_res = cache->ca_on_evict_callback( ( void *) el );
@@ -92,9 +96,10 @@ void *cache_thread( void *cache_p){
                     el->ce_flags = 0;
                     pthread_mutex_unlock( &el->ce_mutex);
                     pthread_mutex_destroy( &el->ce_mutex);
-
+                    TRACE("real eviction clean");
                     free( el);
                     cache->ca_elements_ptr[i] = NULL;
+                    TRACE("real eviction ends");
                 }else{
                     pthread_mutex_unlock( &el->ce_mutex);
                 }
@@ -102,9 +107,11 @@ void *cache_thread( void *cache_p){
         }
         cache->ca_flags &= ~CACHE_ON_LOOP;
         if( (cache->ca_flags & CACHE_EXIT) != 0){
+            TRACE("cache exit flag detected, evicted flag enabled");
             cache->ca_flags |= CACHE_EVICTED;
         }
         if( (cache->ca_flags & CACHE_SET_LOOP_DONE) != 0){
+            TRACE("cache loop done flag detected, CACHE_LOOP_DONE enabled");
             cache->ca_flags &= ~CACHE_SET_LOOP_DONE;
             cache->ca_flags |= CACHE_LOOP_DONE;
         }
@@ -215,7 +222,7 @@ void cache_element_evict( cache_t *cache, int subin){
    
     flags = el->ce_flags;
     if( (flags & CACHE_EL_DIRTY) != 0){
-        el->ce_access_count++;
+        CACHE_EL_ADD_COUNT( el);
         if( cache->ca_on_flush_callback != NULL){
             arg_res = &rc;
             arg_res = (void *) cache->ca_on_flush_callback( (void *) el);
@@ -252,11 +259,12 @@ void cache_element_evict( cache_t *cache, int subin){
 }
 
 int cache_set_flags(  cache_t *cache, uint32_t flag_to_enable){
-    uint16_t flags_mask = CACHE_SYNC|CACHE_FLUSH|CACHE_PAUSE|CACHE_EXIT;
+    uint32_t flags_mask = CACHE_SYNC|CACHE_FLUSH|CACHE_PAUSE|CACHE_EXIT;
 
     flags_mask |= CACHE_SET_LOOP_DONE;
 
-    if( (flag_to_enable & flags_mask) != 0){
+    if( (flag_to_enable & flags_mask) == 0){
+        TRACE("Could not enable flag, 0x%x", flag_to_enable);
         return( -1);
     }
     pthread_mutex_lock( &cache->ca_mutex);
@@ -274,12 +282,22 @@ int cache_clear_loop_done( cache_t *cache){
 
 
 int cache_destroy( cache_t *cache){
-    int rc = 0;
+    int i, rc = 0;
+    cache_element_t *el;
     void *ret;
     TRACE("start");
 
-    cache_sync( cache);
-    cache_set_flags( cache, CACHE_EXIT);
+    pthread_mutex_lock( &cache->ca_mutex);
+
+    for( i = 0; i < cache->ca_elements_capacity; i++){
+        el = cache->ca_elements_ptr[i];
+
+        if( el != NULL){
+            cache_element_mark_eviction( el);
+        }
+    }
+    cache->ca_flags |= CACHE_EXIT;
+    pthread_mutex_unlock( &cache->ca_mutex);
 
     /* wait for the thread loop to run and remove/sync all the stuff */
     rc = cache_wait_for_flags( cache, CACHE_EXIT| CACHE_EVICTED, 10);
@@ -302,7 +320,7 @@ int cache_destroy( cache_t *cache){
 }
 
 int cache_sync( cache_t *cache){
-    int i;
+    int i, rc;
     cache_element_t *el;
     TRACE("start");
     if( (cache->ca_flags & CACHE_READY) == 0){
@@ -315,17 +333,30 @@ int cache_sync( cache_t *cache){
         el = cache->ca_elements_ptr[i];
 
         if( el != NULL){
-            cache_element_mark_eviction( el);
+            if( ( el->ce_flags & CACHE_EL_PIN) == 0){
+                cache_element_mark_eviction( el);
+            }
         }
     }
+    cache->ca_flags |= CACHE_SET_LOOP_DONE;
+
+    TRACE("flags=0x%x", cache->ca_flags);
     pthread_mutex_unlock( &cache->ca_mutex);
 
-    TRACE("end");
-    return(0);
+    rc = cache_wait_for_flags( cache, CACHE_LOOP_DONE, 10);
+
+    TRACE("flags=0x%x", cache->ca_flags);
+    cache_clear_loop_done( cache);
+
+    TRACE("end, cr=%d, flags=0x%x", rc, cache->ca_flags);
+    return(rc);
 }
 
 int cache_pause( cache_t *cache){
-    return( cache_set_flags( cache, CACHE_PAUSE));
+    pthread_mutex_lock( &cache->ca_mutex);
+    cache->ca_flags |= CACHE_PAUSE;
+    pthread_mutex_unlock( &cache->ca_mutex);
+    return( 0);
 }
 
 
@@ -388,7 +419,7 @@ cache_element_t *cache_lookup( cache_t *cache, uint64_t key){
         if( el != NULL){
             if( el->ce_id == key){
                 ret = el;
-                el->ce_access_count++;
+                CACHE_EL_ADD_COUNT( el);
                 break;
             }
         }
@@ -411,24 +442,30 @@ cache_element_t *cache_element_map( cache_t *cache, size_t byte_size){
     pthread_mutex_lock( &cache->ca_mutex);
 
     TRACE("in mutex");
+    sub = -1;
     /* search an empty cache slot */
     for( i = 0; i < cache->ca_elements_capacity; i++){
         if( cache->ca_elements_ptr[i] == NULL){
-            el = cache->ca_elements_ptr[i];
             sub = i;
             break;
         }
     }
 
 
+    
     /* did not found anything!! locate the LRU element and evict */
-    if( el == NULL){
+    if( sub < 0){
         min = INT_MAX;
 
 
         for( i = 0; i < cache->ca_elements_capacity; i++){
             el = cache->ca_elements_ptr[i];
-            if( el != NULL){
+            if( el == NULL){
+                TRACE_ERR( "Should not happen!!!! Abort");
+                el = NULL;
+                goto exit0;
+            }
+            if( ( el->ce_flags & CACHE_EL_PIN) == 0){
                 if( el->ce_access_count < min ){
                     min = el->ce_access_count; 
                     sub = i;
@@ -436,9 +473,15 @@ cache_element_t *cache_element_map( cache_t *cache, size_t byte_size){
             }
         }
 
+        if( sub < 0){
+            TRACE_ERR("all cache elements are pinned. Can not map data");
+            el = NULL;
+            goto exit0;
+        }
         cache_element_evict( cache, sub);
     }
 
+    TRACE("clean pointer found sub=%d", sub);
     el = malloc( sizeof( cache_element_t) + byte_size);
     if( el == NULL){
         TRACE_ERR("malloc error");
@@ -454,6 +497,7 @@ cache_element_t *cache_element_map( cache_t *cache, size_t byte_size){
         goto exit0;
     } 
 
+    TRACE("will fill in the element");
     el->ce_flags = CACHE_EL_ACTIVE | CACHE_EL_CLEAN;
     el->ce_access_count = 1;
     el->ce_id = (uint64_t) el; 
@@ -505,6 +549,35 @@ int cache_element_mark_dirty( cache_element_t *ce){
 }
 
 
+int cache_element_pin( cache_element_t *ce){
+    TRACE("start");
+    if(( ce->ce_flags & CACHE_EL_ACTIVE) == 0){
+        TRACE_ERR("cache element not active");
+        return(-1);
+    }
+
+
+    pthread_mutex_lock( &ce->ce_mutex);
+    ce->ce_flags |= CACHE_EL_PIN;
+    pthread_mutex_unlock( &ce->ce_mutex);
+    TRACE("end");
+    return(0);
+}
+
+int cache_element_mark_unpin( cache_element_t *ce){
+    TRACE("start");
+    if(( ce->ce_flags & CACHE_EL_ACTIVE) == 0){
+        TRACE_ERR("cache element not active");
+        return(-1);
+    }
+
+
+    pthread_mutex_lock( &ce->ce_mutex);
+    ce->ce_flags &= ~CACHE_EL_PIN;
+    pthread_mutex_unlock( &ce->ce_mutex);
+    TRACE("end");
+    return(0);
+}
 
 int cache_element_wait_for_flags( cache_element_t *el, 
                                   uint32_t flags, 

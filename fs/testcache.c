@@ -22,6 +22,26 @@ void *el_flush( void *arg){
     return( NULL);
 }
 
+
+int cache_dump( cache_t *cache){
+    cache_element_t *el;
+    int i;
+    char s[80];
+
+    printf("CACHE DUMP:\n");
+    for( i = 0; i < cache->ca_elements_capacity; i++){
+        sprintf( s, "%d: ", i);
+        el = cache->ca_elements_ptr[i];
+        if( el == NULL){
+            strcat( s, "NULL");
+        }else{
+            strcat( s, (char *) CACHE_EL_DATAPTR( el));
+        }
+        printf("%s\n", s);
+    }
+    printf("\n");
+}
+
 int main( int argc, char **argv){
     cache_t *cache;
     int rc;
@@ -54,6 +74,7 @@ int main( int argc, char **argv){
     }
 
 
+    cache_dump( cache);
     el = cache_element_map( cache, sizeof( s1));
     if( el == NULL){
         TRACE_ERR("Issues in cache_alloc()");
@@ -111,6 +132,7 @@ int main( int argc, char **argv){
         return( -1);
     }
 
+    cache_dump( cache);
 
     TRACE("Ok basic test");
     el3 = cache_element_map( cache, sizeof(s3));
@@ -144,6 +166,7 @@ int main( int argc, char **argv){
     }
 
 
+    cache_dump( cache);
     TRACE("will pin el");
     cache_element_pin( el);
 
@@ -161,23 +184,25 @@ int main( int argc, char **argv){
         return( -1);
     }
 
+    cache_dump( cache);
+
     TRACE("will pin el5");
     cache_element_pin( el5);
     cache_element_mark_dirty( el);
-    cache_element_mark_dirty( el2);
     cache_element_mark_dirty( el3);
     cache_element_mark_dirty( el4);
     cache_element_mark_dirty( el5);
 
     cache_sync( cache);
 
+    cache_dump( cache);
     cache_element_mark_dirty( el);
-    cache_element_mark_dirty( el2);
     cache_element_mark_dirty( el3);
     cache_element_mark_dirty( el4);
     cache_element_mark_dirty( el5);
     rc = cache_destroy( cache);
 
+    cache_dump( cache);
     return( rc);
 }
 

@@ -4,7 +4,6 @@
 #include "kfs_mem.h"
 #include "kfs_disk.h"
 #include "kfs_io.h"
-#include "kfs_page_cache.h"
 #include "map.h"
 #include "kfs_super.h"
 

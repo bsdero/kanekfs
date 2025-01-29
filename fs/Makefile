@@ -12,7 +12,7 @@ LIBKFS=libkfs.a
 
 
 TESTS=testdict testrand testhash testdh testgc testmap testsizes \
-      test_page_cache test_kfs_mount
+      testcache test_page_cache test_kfs_mount
 
 TOOLS=kfs_mkfs kfs_info kfs_server kfs_set_sb_meta
 
@@ -86,10 +86,10 @@ testsizes: sizes.o
 testcache: testcache.o cache.o
 	$(CC) -o testcache testcache.o cache.o 
 
-test_page_cache: test_page_cache.o krand64.o dict.o hash.o dumphex.o gc.o \
-	        kfs_io.o page_cache.o map.o
-	$(CC) -o test_page_cache test_page_cache.o krand64.o dict.o hash.o \
-		dumphex.o map.o kfs_io.o page_cache.o gc.o -lpthread
+test_page_cache: test_page_cache.o dumphex.o page_cache.o utils.o eio.o \
+	cache.o
+	$(CC) -o test_page_cache test_page_cache.o dumphex.o eio.o page_cache.o \
+		gc.o cache.o -lpthread
 
 clean:
 	@UNAME=`uname|egrep -i "cygwin|windows"`; \

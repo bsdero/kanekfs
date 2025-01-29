@@ -17,18 +17,6 @@ typedef struct{
     int sock_buffer_size; 
 }kfs_config_t; 
 
-char *trim (char *s);
-uint64_t get_bd_size( char *fname);
-int create_file( char *fname);
-
-
-char *pages_alloc( int n);
-
-int block_read( int fd, char *page, uint64_t addr);
-int block_write( int fd, char *page, uint64_t addr);
-int extent_read( int fd, char *extent, uint64_t addr, int block_num);
-int extent_write( int fd, char *extent, uint64_t addr, int block_num);
-
 int kfs_config_read( char *filename, kfs_config_t *conf);
 void kfs_config_display( kfs_config_t *conf);
 

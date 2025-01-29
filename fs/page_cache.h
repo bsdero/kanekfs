@@ -1,5 +1,5 @@
-#ifndef _KFS_PGCACHE_H_
-#define _KFS_PGCACHE_H_
+#ifndef _PAGE_CACHE_H_
+#define _PAGE_CACHE_H_
 
 #include <pthread.h>
 #include <stdint.h>
@@ -24,11 +24,7 @@ typedef struct{
 
 /* create and init a cache_t structure */
 pgcache_t *pgcache_alloc( int fd, int elements_capacity);
-#define pgcache_run(x)         (cache_run( CACHE(x)))
 int pgcache_destroy( pgcache_t *pgcache);
-#define pgcache_sync(x)        (cache_sync( CACHE(x)))
-
-
 pgcache_element_t *pgcache_element_map( pgcache_t *cache, 
                                         uint64_t addr, 
                                         int numblocks );

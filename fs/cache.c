@@ -513,7 +513,7 @@ cache_element_t *cache_element_map( cache_t *cache, size_t byte_size){
     el->ce_flags = CACHE_EL_ACTIVE | CACHE_EL_CLEAN;
     el->ce_access_count = 1;
     el->ce_id = (uint64_t) el; 
-    el->ce_owner_cache = cache;
+    el->ce_owner_cache = ( void *) cache;
  
     cache->ca_elements_in_use++;
     cache->ca_elements_ptr[sub] = el;

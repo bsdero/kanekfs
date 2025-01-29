@@ -60,7 +60,7 @@ int main( int argc, char **argv){
 
     rc = cache_enable( cache);
     if( rc != 0){
-        TRACE_ERR("Issues in cache_start_thread()");
+        TRACE_ERR("Issues in cache_enable()");
         return( -1);
     }
         

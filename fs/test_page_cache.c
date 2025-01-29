@@ -9,14 +9,41 @@
 #include "dumphex.h"
 #include "page_cache.h"
 
+int cache_dump( cache_t *cache){
+    cache_element_t *el;
+    pgcache_element_t *pg_el;
+    int i;
+    char s[80];
+
+    printf("CACHE DUMP:\n");
+    for( i = 0; i < cache->ca_elements_capacity; i++){
+        sprintf( s, "%d: ", i);
+        el = cache->ca_elements_ptr[i];
+        pg_el = ( pgcache_element_t *) el;
+        if( el == NULL){
+            strcat( s, "NULL");
+        }else{
+            sprintf( s, "%d: %lu", i, el->ce_id);
+            dumphex( pg_el->pe_mem_ptr, 128);
+        }
+        printf("%s\n", s);
+    }
+    printf("\n");
+    return(0);
+}
+
 
 int main( int argc, char **argv){
-    pgcache_t *cache;
+    pgcache_t *pgcache;
     int rc, fd;
     char *filename;
     pgcache_element_t *el, *el2;
-    char s1[] = "dabale arroz a la zorra el abad";
-    char s2[] = "was it a car or a cat i saw";
+    char s1[] = "1 anita lava la tina";
+    char s2[] = "2 dabale arroz a la zorra el abad";
+    char s3[] = "3 Amo la paloma";
+    char s4[] = "4 Luz azul";
+    char s5[] = "5 No traces en ese carton";
+
     if( argc != 2){
         printf("Usage: testbcache <file>\n");
         return(-1);
@@ -30,95 +57,102 @@ int main( int argc, char **argv){
         return( -1);
     }
        
-    cache = kfs_pgcache_alloc( fd, 32);
-    if( cache == NULL){
-        TRACE_ERR("Issues in kfs_pgcache_alloc()");
+    pgcache = pgcache_alloc( fd, 32);
+    if( pgcache == NULL){
+        TRACE_ERR("Issues in pgcache_alloc()");
         close( fd);
         return( -1);
     }
         
 
-    rc = kfs_pgcache_start_thread( cache);
+    rc = cache_enable( CACHE(pgcache) );
     if( rc != 0){
-        TRACE_ERR("Issues in kfs_pgcache_start_thread()");
+        TRACE_ERR("Issues in cache_enable()");
         close( fd);
         return( -1);
     }
         
-    rc = kfs_pgcache_flags_wait( cache, KFS_CACHE_ACTIVE, 10);
+    rc = cache_wait_for_flags( CACHE( pgcache), CACHE_ACTIVE, 10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_CACHE_ACTIVE");
-        close( fd);
+        TRACE_ERR("timeout waiting for CACHE_ACTIVE flag");
         return( -1);
     }
 
 
-    el = kfs_pgcache_element_map( cache, 0, 1, 0, NULL);
+    cache_dump( CACHE( pgcache));
+
+
+    el = pgcache_element_map( pgcache, 0, 1);
     if( el == NULL){
-        TRACE_ERR("Issues in kfs_pgcache_alloc()");
+        TRACE_ERR("Issues in pgcache_element_map()");
         close( fd);
         return( -1);
     }
 
 
-    rc = kfs_pgcache_element_flags_wait( el, 
-                                         KFS_CACHE_ND_ACTIVE, 
-                                         10);
+    rc = cache_element_wait_for_flags( CACHE_EL(el), 
+                                       CACHE_EL_ACTIVE, 
+                                       10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_CACHE_ND_ACTIVE");
-        close( fd);
+        TRACE_ERR("timeout waiting for CACHE_EL_ACTIVE");
         return( -1);
     }
 
-    strcpy( (char *) el->ce_mem_ptr, s1);
-    kfs_pgcache_element_mark_dirty( el);
-    rc = kfs_pgcache_element_flags_wait( el, 
-                                         KFS_CACHE_ND_CLEAN, 
-                                         10);
-    
+    strcpy( (char *) el->pe_mem_ptr, s1);
+    cache_element_mark_dirty( CACHE_EL(el));
+    rc = cache_element_wait_for_flags( CACHE_EL(el), 
+                                       CACHE_EL_CLEAN, 
+                                       10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_CACHE_ND_CLEAN");
+        TRACE_ERR("timeout waiting for CACHE_EL_CLEAN");
+        return( -1);
+    }
+
+
+
+    el2 = pgcache_element_map( pgcache, 10, 2);
+    if( el == NULL){
+        TRACE_ERR("Issues in pgcache_element_map()");
         close( fd);
         return( -1);
     }
 
 
-    el2 = kfs_pgcache_element_map( cache, 10, 1, 0, NULL);
-    if( el2 == NULL){
-        TRACE_ERR("Issues in kfs_pgcache_alloc()");
-        close( fd);
-        return( -1);
-    }
-    rc = kfs_pgcache_element_flags_wait( el2, 
-                                            KFS_CACHE_ND_ACTIVE, 
-                                            10);
+    cache_dump( CACHE( pgcache));
+    rc = cache_element_wait_for_flags( CACHE_EL(el2), 
+                                       CACHE_EL_ACTIVE, 
+                                       10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_CACHE_ND_ACTIVE");
-        close( fd);
+        TRACE_ERR("timeout waiting for CACHE_EL_ACTIVE");
         return( -1);
     }
 
-    strcpy( (char *) el->ce_mem_ptr, s2);
-    kfs_pgcache_element_mark_dirty( el);
-    strcpy( (char *) el2->ce_mem_ptr, s1);
-    kfs_pgcache_element_mark_dirty( el2);
+    strcpy( (char *) el->pe_mem_ptr, s2);
+    cache_element_mark_dirty( CACHE_EL(el));
 
-    rc = kfs_pgcache_element_flags_wait( el, KFS_CACHE_ND_CLEAN, 10);
+    strcpy( (char *) el2->pe_mem_ptr, s3);
+    cache_element_mark_dirty( CACHE_EL(el2));
+
+
+    cache_dump( CACHE( pgcache));
+
+    rc = cache_element_wait_for_flags( CACHE_EL(el), 
+                                       CACHE_EL_CLEAN, 
+                                       10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_CACHE_ND_CLEAN");
-        close( fd);
+        TRACE_ERR("timeout waiting for CACHE_EL_CLEAN");
         return( -1);
     }
-
-    rc = kfs_pgcache_element_flags_wait( el2, KFS_CACHE_ND_CLEAN, 10);
+    rc = cache_element_wait_for_flags( CACHE_EL(el2), 
+                                       CACHE_EL_CLEAN, 
+                                       10);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for KFS_CACHE_ND_CLEAN");
-        close( fd);
+        TRACE_ERR("timeout waiting for CACHE_EL_CLEAN");
         return( -1);
     }
 
 
-    rc = kfs_pgcache_destroy( cache);
+    rc = cache_destroy( CACHE(pgcache));
     close( fd);
 
     return( rc);

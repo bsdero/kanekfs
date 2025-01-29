@@ -5,103 +5,36 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include "trace.h"
-#include "kfs_page_cache.h"
+#include "page_cache.h"
 #include "kfs_io.h"
 
 
-void *kfs_pgcache_loop_thread( void *cache_p){
-    pgcache_t *cache = ( pgcache_t *) cache_p;
-    struct timespec remaining, request;
-    int rc, i;
-    void *arg_res; 
-    pgcache_element_t *el;
-    uint32_t flags;
-    uint64_t nsec = 100000000L; /*     1/10th of second */
 
-    TRACE("start");
-    cache->ca_tid = pthread_self();
-    cache->ca_flags |= KFS_CACHE_ACTIVE;
-    request.tv_sec = 0;
-    request.tv_nsec = nsec;
+void *pgcache_el_evict( void *arg){
+    pgcache_element_t *pgcache_el = ( pgcache_element_t *) arg;
+    free( pgcache_el->pe_mem_ptr);
+    return( NULL);
+}
 
-
-    do{
-        if( cache->ca_flags & KFS_CACHE_PAUSE_LOOP){
-            request.tv_nsec = 0;
-            request.tv_sec = 1;  /* pause for one second */
-            nanosleep( &request, &remaining);
-            request.tv_sec = 0;
-            request.tv_nsec = nsec;
-            continue;
-        }
- 
-        pthread_mutex_lock( &cache->ca_mutex);
-        cache->ca_flags |= KFS_CACHE_ON_LOOP;
-        for( i = 0; i < cache->ca_elements_capacity; i++){
-            el = &cache->ca_elements[i];
-            flags = el->ce_flags;
-
-            if((flags & KFS_CACHE_ND_ACTIVE) == 0){
-                continue;
-            }
-
-            rc = pthread_mutex_trylock( &el->ce_mutex);
-            if( rc != 0){
-                continue;
-            }
-
-            if( (flags & KFS_CACHE_ND_DIRTY) != 0){
-                el->ce_count++;
-                rc = extent_write( cache->ca_fd, 
-                                   el->ce_mem_ptr, 
-                                   el->ce_block_addr, 
-                                   el->ce_num_blocks);
+void *pgcache_el_flush( void *arg){
+    pgcache_element_t *pgcache_el = ( pgcache_element_t *) arg;
+    int rc = extent_write( pgcache_el->pe_el->ca_fd, 
+                           el->ce_mem_ptr, 
+                           el->ce_block_addr, 
+                           el->ce_num_blocks);
                 if( rc != 0){
                     TRACE_ERR("extent write error");
                 }else{
                     el->ce_flags &= ~KFS_CACHE_ND_DIRTY;
                     el->ce_flags |= KFS_CACHE_ND_CLEAN;
-                }
-                TRACE("flushed out");
-            }
-            if( (flags & KFS_CACHE_ND_EVICT) != 0){
-                if( el->ce_on_unmap_callback != NULL){
-                    arg_res = (void *) &rc; 
-                    arg_res = el->ce_on_unmap_callback( ( void *) el );
-                    if( rc != 0){
-                        TRACE_ERR("error in unmap_callback, rc=%d",
-                                  *((int *)arg_res) );
-                    }
-                }
-                free( el->ce_mem_ptr);
-
-                cache->ca_elements_in_use--;
-                el->ce_flags = 0;
-                pthread_mutex_unlock( &el->ce_mutex);
-                pthread_mutex_destroy( &el->ce_mutex);
-            }else{
-                pthread_mutex_unlock( &el->ce_mutex);
-            }
-        }
-
-        cache->ca_flags &= ~KFS_CACHE_ON_LOOP;
-        if( (cache->ca_flags & KFS_CACHE_EXIT_LOOP) != 0){
-            cache->ca_flags |= KFS_CACHE_EVICTED;
-        }
-        pthread_mutex_unlock( &cache->ca_mutex);
-        nanosleep( &request, &remaining);
-
-    }while( (cache->ca_flags & KFS_CACHE_EVICTED) == 0);
-
-
-    cache->ca_flags = ( KFS_CACHE_EXIT_LOOP | KFS_CACHE_EVICTED);
-
-    TRACE("end");
-    pthread_exit( NULL);
+                } 
+    return( NULL);
 }
 
 
-pgcache_element_t *kfs_pgcache_element_map( pgcache_t *cache, 
+
+
+pgcache_element_t *pgcache_element_map( pgcache_t *cache, 
                                         uint64_t addr, 
                                         int numblocks, 
                                         uint32_t flags,
@@ -172,13 +105,12 @@ exit0:
 
 
 
-pgcache_t *kfs_pgcache_alloc( int fd, int num_elems){
+pgcache_t *pgcache_alloc( int fd, int elements_capacity){
     pgcache_t *pgcache;
-    void *p;
+    int rc;
 
     TRACE("start");
 
-    
     pgcache = malloc( sizeof( pgcache_t ));
     if( pgcache == NULL){
         TRACE_ERR("Error in malloc()"); 
@@ -186,33 +118,17 @@ pgcache_t *kfs_pgcache_alloc( int fd, int num_elems){
     }
 
     memset( (void *) pgcache, 0, sizeof( pgcache_t));
-
-    p = malloc( sizeof( pgcache_element_t) * num_elems);
-    if( p == NULL){
-        TRACE_ERR("Error in malloc()");
-        goto exit1;
+    rc = cache_init( &pgcache->pc_cache, 
+                     elements_capacity,
+                     pg_cache_on_evict,
+                     pg_cache_on_flush);
+    if( rc != 0){
+        TRACE_ERR("pgcache->cache init has failed"); 
+        free( pgcache);
+        pgcache = NULL;
     }
 
-    memset( p, 0, sizeof( pgcache_element_t) * num_elems);
-   
-    pgcache->ca_elements = p;
-    pgcache->ca_elements_capacity = num_elems;
-    pgcache->ca_elements_in_use = 0;
-    pgcache->ca_fd = fd;
-
-    if (pthread_mutex_init(&pgcache->ca_mutex, NULL) != 0) { 
-        TRACE_ERR("mutex init has failed"); 
-        goto exit1; 
-    } 
-
-    pgcache->ca_flags = KFS_CACHE_READY;
-    goto exit0; 
-
-
-exit1:
-    free( pgcache);
-    pgcache = NULL;
-
+    pgcache->fd = fd;
 exit0:
     TRACE("end");
 
@@ -221,82 +137,17 @@ exit0:
 
 
 
-int kfs_pgcache_start_thread( pgcache_t *cache){
-    int rc;
-
+int pgcache_destroy( pgcache_t *pgcache){
     TRACE("start");
-
-    if( (cache->ca_flags & KFS_CACHE_READY) == 0){
-        TRACE_ERR("cache is not ready, abort");
-        return(-1);
-    }
-
-    rc = pthread_create( &cache->ca_thread, 
-                         NULL, 
-                         kfs_pgcache_loop_thread,
-                         cache);
-    if( rc != 0){
-        TRACE_ERR("pthread_create() failed");
-        cache->ca_thread = pthread_self();
-        return( -1);
-    }
-
-    TRACE("end");
-    return(0);
-}
-
-
-int kfs_pgcache_destroy( pgcache_t *cache){
-    int i, rc = 0;
-    pgcache_element_t *el;
-    void *ret;
-    TRACE("start");
-    if( (cache->ca_flags & KFS_CACHE_READY) == 0){
-        TRACE_ERR("cache is not ready, abort");
-        return(-1);
-    }
-
-    pthread_mutex_lock( &cache->ca_mutex);
-    TRACE("in mutex");
-    for( i = 0; i < cache->ca_elements_capacity; i++){
-        el = &cache->ca_elements[i];
-
-        if((el->ce_flags & KFS_CACHE_ND_ACTIVE) == 0){
-            continue;
-        }
-        rc = kfs_pgcache_element_unmap( el);
-        if( rc != 0){
-            TRACE_ERR("Cache element not active");
-        }
-    }
-    
-    cache->ca_flags |= KFS_CACHE_EXIT_LOOP;    
-    pthread_mutex_unlock( &cache->ca_mutex);
-
-    /* wait for the thread loop to run and remove/sync all the stuff */
-    rc = kfs_pgcache_flags_wait( cache, 
-                                 KFS_CACHE_EXIT_LOOP | KFS_CACHE_EVICTED, 
-                                 10);
-    if( rc != 0){
-        TRACE_ERR("timeout waiting for flags = 0");
-    }
-
-    /* if we are here the thread should be finished already. */
-    if( pthread_equal( cache->ca_thread, cache->ca_tid)){
-        pthread_join( cache->ca_thread, &ret);
-    }
-    
-    pthread_mutex_destroy( &cache->ca_mutex);
-
-    free( cache->ca_elements);
-    free( cache);
+    cache_disable( &el->pc_cache);
+    free( pgcache);
     TRACE("end");
 
     return(0);
 }
 
 
-int kfs_pgcache_element_unmap( pgcache_element_t *ce){
+int pgcache_element_unmap( pgcache_element_t *ce){
     TRACE("start");
     if(( ce->ce_flags & KFS_CACHE_ND_ACTIVE) == 0){
         TRACE_ERR("cache element not active");
@@ -312,7 +163,7 @@ int kfs_pgcache_element_unmap( pgcache_element_t *ce){
 }
 
 
-int kfs_pgcache_element_mark_dirty( pgcache_element_t *ce){
+int pgcache_element_mark_dirty( pgcache_element_t *ce){
     TRACE("start");
     if(( ce->ce_flags & KFS_CACHE_ND_ACTIVE) == 0){
         TRACE_ERR("cache element not active");
@@ -329,7 +180,7 @@ int kfs_pgcache_element_mark_dirty( pgcache_element_t *ce){
 }
 
 
-int kfs_pgcache_sync( pgcache_t *cache){
+int pgcache_sync( pgcache_t *cache){
     int i, rc;
     pgcache_element_t *el;
     TRACE("start");
@@ -345,7 +196,7 @@ int kfs_pgcache_sync( pgcache_t *cache){
         if((el->ce_flags & KFS_CACHE_ND_ACTIVE) == 0){
             continue;
         }
-        rc = kfs_pgcache_element_unmap( el);
+        rc = pgcache_element_unmap( el);
         if( rc != 0){
             TRACE_ERR("Cache element not active");
         }
@@ -365,7 +216,7 @@ int kfs_pgcache_sync( pgcache_t *cache){
  * be != 0.
  *
  */
-int kfs_pgcache_flags_wait( pgcache_t *cache, 
+int pgcache_flags_wait( pgcache_t *cache, 
                            uint32_t flags, 
                            int timeout_secs){
     struct timespec start_time, sleep_time, current_time, diff_time;
@@ -400,7 +251,7 @@ int kfs_pgcache_flags_wait( pgcache_t *cache,
     return( rc);
 }
 
-int kfs_pgcache_element_flags_wait( pgcache_element_t *el, 
+int pgcache_element_flags_wait( pgcache_element_t *el, 
                                     uint32_t flags, 
                                     int timeout_secs){
 

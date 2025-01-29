@@ -4,10 +4,6 @@
 #include "dumphex.h"
 #include "cache.h"
 
-void *el_map( void *arg){
-    TRACE("MAP: ptr=%p", arg);
-    return( NULL);
-}
 
 void *el_evict( void *arg){
     char *str = (char *) CACHE_EL_DATAPTR(arg);
@@ -40,6 +36,7 @@ int cache_dump( cache_t *cache){
         printf("%s\n", s);
     }
     printf("\n");
+    return(0);
 }
 
 int main( int argc, char **argv){
@@ -54,14 +51,14 @@ int main( int argc, char **argv){
     char s5[] = "5 No traces en ese carton";
 
 
-    cache = cache_alloc( 4, NULL, el_map, el_evict, el_flush);
+    cache = cache_alloc( 4, el_evict, el_flush);
     if( cache == NULL){
         TRACE_ERR("Issues in cache_alloc()");
         return( -1);
     }
         
 
-    rc = cache_run( cache);
+    rc = cache_enable( cache);
     if( rc != 0){
         TRACE_ERR("Issues in cache_start_thread()");
         return( -1);

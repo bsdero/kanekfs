@@ -1,8 +1,8 @@
 #ifndef _CACHE_H_
 #define _CACHE_H_
 
-#include <sys/time.h>
 #include <pthread.h>
+#include <sys/time.h>
 #include <stdint.h>
 #include "trace.h"
 
@@ -90,7 +90,10 @@
                                            CACHE_LOOP_DONE to zero when 
                                            acknowledgement */
 
-#define CACHE_EL_ADD_COUNT(x)  (((cache_element_t *)x)->ce_access_count++)
+#define CACHE(x)               ((cache_t *)(x))
+#define CACHE_EL(x)            ((cache_element_t *)(x))
+
+#define CACHE_EL_ADD_COUNT(x)  ((CACHE_EL(x))->ce_access_count++)
 
 /* each element in cache.
  *
@@ -132,18 +135,20 @@ typedef struct{
 
 
 /* cache functions */
-
+int cache_init( cache_t *cache,
+                int elements_capacity,
+                void *(*on_evict)(void *),
+                void *(*on_flush)(void *));
 
 /* create and init a cache_t structure */
 cache_t *cache_alloc( int elements_capacity, 
-                      void *data,
-                      void *(*on_map)(void *),
                       void *(*on_evict)(void *),
                       void *(*on_flush)(void *));
 
 /* start the cache thread */
-int cache_run( cache_t *cache);
 
+int cache_enable( cache_t *cache);
+int cache_disable( cache_t *cache);
 int cache_clear_loop_done( cache_t *cache);
 int cache_destroy( cache_t *cache);
 int cache_sync( cache_t *cache);

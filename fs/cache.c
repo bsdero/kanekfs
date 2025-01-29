@@ -128,14 +128,43 @@ void *cache_thread( void *cache_p){
 }
 
 
+int cache_init( cache_t *cache,
+                int elements_capacity,
+                void *(*on_evict)(void *),
+                void *(*on_flush)(void *)){
+    void *p;
+
+    memset( (void *) cache, 0, sizeof( cache_t));
+
+    /* reserve an array of pointers */
+    p = malloc( sizeof( cache_element_t *) * elements_capacity);
+    if( p == NULL){
+        TRACE_ERR("Error in malloc()");
+        return( -1);
+    }
+    memset( p, 0, sizeof( cache_element_t *) * elements_capacity);
+   
+    cache->ca_elements_ptr = p;
+    cache->ca_elements_capacity = elements_capacity;
+    cache->ca_elements_in_use = 0;
+    cache->ca_on_evict_callback = on_evict;
+    cache->ca_on_flush_callback = on_flush;
+
+    if (pthread_mutex_init(&cache->ca_mutex, NULL) != 0) { 
+        TRACE_ERR("mutex init has failed"); 
+        return( -1);
+    } 
+
+    /* the cache thread is ready to run */
+    cache->ca_flags = CACHE_READY;
+
+    return( 0);
+}
 
 cache_t *cache_alloc( int elements_capacity, 
-                          void *data,
-                          void *(*on_map)(void *),
-                          void *(*on_evict)(void *),
-                          void *(*on_flush)(void *)){
+                      void *(*on_evict)(void *),
+                      void *(*on_flush)(void *)){
     cache_t *cache;
-    void *p;
 
     TRACE("start");
 
@@ -145,38 +174,11 @@ cache_t *cache_alloc( int elements_capacity,
         TRACE_ERR("Error in malloc()"); 
         goto exit0;
     }
-    memset( (void *) cache, 0, sizeof( cache_t));
-
-    /* reserve an array of pointers */
-    p = malloc( sizeof( cache_element_t *) * elements_capacity);
-    if( p == NULL){
-        TRACE_ERR("Error in malloc()");
-        goto exit1;
-    }
-    memset( p, 0, sizeof( cache_element_t *) * elements_capacity);
    
-    cache->ca_elements_ptr = p;
-    cache->ca_elements_capacity = elements_capacity;
-    cache->ca_elements_in_use = 0;
-    cache->ca_data = data;
-    cache->ca_on_map_callback = on_map;
-    cache->ca_on_evict_callback = on_evict;
-    cache->ca_on_flush_callback = on_flush;
-
-    if (pthread_mutex_init(&cache->ca_mutex, NULL) != 0) { 
-        TRACE_ERR("mutex init has failed"); 
-        goto exit1; 
-    } 
-
-    /* the cache thread is ready to run */
-    cache->ca_flags = CACHE_READY;
-    goto exit0; 
-
-
-exit1:
-    free( cache);
-    cache = NULL;
-
+    if( cache_init( cache, elements_capacity, on_evict, on_flush) != 0){
+        free( cache);
+        cache = NULL;
+    }
 exit0:
     TRACE("end");
 
@@ -184,7 +186,7 @@ exit0:
 }
 
 
-int cache_run( cache_t *cache){
+int cache_enable( cache_t *cache){
     int rc;
 
     TRACE("start");
@@ -281,7 +283,7 @@ int cache_clear_loop_done( cache_t *cache){
 }
 
 
-int cache_destroy( cache_t *cache){
+int cache_disable( cache_t *cache){
     int i, rc = 0;
     cache_element_t *el;
     void *ret;
@@ -313,6 +315,16 @@ int cache_destroy( cache_t *cache){
     pthread_mutex_destroy( &cache->ca_mutex);
 
     free( cache->ca_elements_ptr);
+    TRACE("end");
+
+    return(0);
+}
+
+int cache_destroy( cache_t *cache){
+    TRACE("start");
+    if( cache->ca_elements_ptr != NULL){
+        cache_disable( cache);
+    }
     free( cache);
     TRACE("end");
 

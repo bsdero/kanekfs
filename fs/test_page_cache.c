@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include "dumphex.h"
-#include "kfs_page_cache.h"
+#include "page_cache.h"
 
 
 int main( int argc, char **argv){

@@ -209,14 +209,14 @@ For practicity, an object storage service is on plan, and there will be a metada
 
 So some of the planned modules and tools:
 
--kfs_slotd: a metadata service with direct access to block storage
--kfs_mkslots: a tool for build metadata slots in block storage
--kfs_obstrd: an object storage service for store and retrieve files in block storage
--kfs_mkostor: a tool for build object storage in block storage
--kfs_graphd: a graph daemon, with the graph file system structure and also is the interface with user apps and graph command line interface
--kfs_mkgraph: a tool for build the graph file system
--kaneksh: a CLI shell which interfaces with both posix and graph file system
--kfs_mkfs a tool for build slots, storage and graph in a single block storage device
+- kfs_slotd: a metadata service with direct access to block storage
+- kfs_mkslots: a tool for build metadata slots in block storage
+- kfs_obstrd: an object storage service for store and retrieve files in block storage
+- kfs_mkostor: a tool for build object storage in block storage
+- kfs_graphd: a graph daemon, with the graph file system structure and also is the interface with user apps and graph command line interface
+- kfs_mkgraph: a tool for build the graph file system
+- kaneksh: a CLI shell which interfaces with both posix and graph file system
+- kfs_mkfs a tool for build slots, storage and graph in a single block storage device
 
 Also diagnostics tools and scripts are in the roadmap.
 

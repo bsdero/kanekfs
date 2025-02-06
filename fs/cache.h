@@ -167,5 +167,6 @@ int cache_element_wait_for_flags( cache_element_t *ce,
                                   uint32_t flags, 
                                   int timeout_secs);
 
+void cache_element_evict( cache_t *cache, uint64_t key);
 #endif
 

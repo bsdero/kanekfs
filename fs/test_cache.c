@@ -194,8 +194,6 @@ int main( int argc, char **argv){
 
     cache_dump( cache);
     cache_element_mark_dirty( el);
-    cache_element_mark_dirty( el3);
-    cache_element_mark_dirty( el4);
     cache_element_mark_dirty( el5);
     rc = cache_destroy( cache);
 

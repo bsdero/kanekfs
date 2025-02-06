@@ -42,13 +42,38 @@ pgcache_element_t *pgcache_element_map( pgcache_t *pgcache,
                                         int numblocks){
     int i, rc;
     pgcache_element_t *el;
+    cache_element_t *cel;
+    cache_t *cache = (cache_t *) pgcache;
     void *p;
     
     TRACE("start");
 
+
+    /* loop in the cache, look if the elements is there already */
+    pthread_mutex_lock( &pgcache->pc_mutex);
+    for( i = 0; i < cache->ca_elements_capacity; i++){
+        cel = cache->ca_elements_ptr[i];
+
+        if( cel == NULL){
+            continue;
+        }
+        if( cel->ce_id == addr){ /* element exist */
+            CACHE_EL_ADD_COUNT( cel);
+            el = (pgcache_element_t *) cel;
+            if( numblocks == el->pe_num_blocks){ /* page already mapped */
+                goto exit0;
+            }else{ /* same address, different size, evict */
+                cache_element_evict( cache, addr);
+                el = NULL;
+                cel = NULL;
+            }
+            break;
+        }
+    }
+
+    /* map cache element */
     p = cache_element_map( CACHE( pgcache), 
                            sizeof( pgcache_element_t));
-
     if( p == NULL){
         el = NULL;
         goto exit0;
@@ -74,9 +99,10 @@ pgcache_element_t *pgcache_element_map( pgcache_t *pgcache,
 
     el->pe_block_addr = addr;
     el->pe_num_blocks = numblocks;
+    el->pe_el.ce_id = (uint64_t) addr;
  
 exit0:
-
+    pthread_mutex_unlock( &pgcache->pc_mutex);
     
     TRACE("end");
     return( el);
@@ -105,9 +131,19 @@ pgcache_t *pgcache_alloc( int fd, int elements_capacity){
         TRACE_ERR("pgcache->cache init has failed"); 
         free( pgcache);
         pgcache = NULL;
+        goto exit0;
+    }
+
+
+    if( pthread_mutex_init( &pgcache->pc_mutex, NULL) != 0) { 
+        TRACE_ERR("mutex init has failed");
+        free( pgcache);
+        pgcache = NULL;
+        goto exit0;
     }
 
     pgcache->pc_fd = fd;
+
 exit0:
     TRACE("end");
 
@@ -124,5 +160,6 @@ int pgcache_destroy( pgcache_t *pgcache){
 
     return(0);
 }
+
 
 

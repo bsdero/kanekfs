@@ -8,7 +8,6 @@
 
 typedef struct{
     cache_element_t pe_el;
-    uint64_t pe_flags;
     void *pe_mem_ptr;   /* ptr to memory */
     uint64_t pe_block_addr;           /* block mapped */
     int pe_num_blocks; /* num of blocks */
@@ -19,6 +18,9 @@ typedef struct{
 typedef struct{
     cache_t pc_cache;
     int pc_fd;
+
+    /* mutex for this cache */
+    pthread_mutex_t pc_mutex;
 }pgcache_t;
 
 

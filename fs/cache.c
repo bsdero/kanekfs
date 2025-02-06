@@ -211,7 +211,7 @@ int cache_enable( cache_t *cache){
 }
 
 
-void cache_element_evict( cache_t *cache, int subin){
+void cache_element_evict_by_idx( cache_t *cache, int subin){
 /* a cache mutex on is assumed!!! */
     int rc, *arg_res;
     cache_element_t *el;
@@ -259,6 +259,29 @@ void cache_element_evict( cache_t *cache, int subin){
     free( el);
     cache->ca_elements_ptr[subin] = NULL;
 }
+
+
+
+void cache_element_evict( cache_t *cache, uint64_t key){
+    cache_element_t *el;
+    int i;
+
+    pthread_mutex_lock( &cache->ca_mutex);
+    for( i = 0; i < cache->ca_elements_capacity; i++){
+        el = cache->ca_elements_ptr[i];
+
+        if( el != NULL){
+            if( el->ce_id == key){
+                cache_element_evict_by_idx( cache, i);
+                break;
+            }
+        }
+    }
+    pthread_mutex_unlock( &cache->ca_mutex);
+}
+
+
+
 
 int cache_set_flags(  cache_t *cache, uint32_t flag_to_enable){
     uint32_t flags_mask = CACHE_SYNC|CACHE_FLUSH|CACHE_PAUSE|CACHE_EXIT;
@@ -490,7 +513,7 @@ cache_element_t *cache_element_map( cache_t *cache, size_t byte_size){
             el = NULL;
             goto exit0;
         }
-        cache_element_evict( cache, sub);
+        cache_element_evict_by_idx( cache, sub);
     }
 
     TRACE("clean pointer found sub=%d", sub);

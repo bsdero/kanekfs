@@ -1,8 +1,11 @@
+./fs/cache.c
 ./fs/cache.h
 ./fs/dict.c
 ./fs/dict.h
 ./fs/dumphex.c
 ./fs/dumphex.h
+./fs/eio.c
+./fs/eio.h
 ./fs/gc.c
 ./fs/gc.h
 ./fs/globals.c
@@ -15,8 +18,6 @@
 ./fs/kfs_io.h
 ./fs/kfs_mem.h
 ./fs/kfs_mkfs.c
-./fs/kfs_page_cache.c
-./fs/kfs_page_cache.h
 ./fs/kfs_server.c
 ./fs/kfs_set_sb_meta.c
 ./fs/kfs_slot_cache.c
@@ -29,7 +30,10 @@
 ./fs/list.h
 ./fs/map.c
 ./fs/map.h
+./fs/page_cache.c
+./fs/page_cache.h
 ./fs/sizes.c
+./fs/testcache.c
 ./fs/testdh.c
 ./fs/testdict.c
 ./fs/testgc.c
@@ -40,5 +44,7 @@
 ./fs/test_page_cache.c
 ./fs/trace.c
 ./fs/trace.h
+./fs/utils.c
+./fs/utils.h
 ./snippets/test_clock.c
 ./snippets/test_clock_delay.c

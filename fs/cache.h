@@ -94,6 +94,7 @@
 #define CACHE_EL(x)            ((cache_element_t *)(x))
 
 #define CACHE_EL_ADD_COUNT(x)  ((CACHE_EL(x))->ce_access_count++)
+#define IS_CACHE_ACTIVE(x)     (((CACHE(x))->ca_flags & CACHE_ACTIVE)?1:0)
 
 /* each element in cache.
  *

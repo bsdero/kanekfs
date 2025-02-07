@@ -161,5 +161,71 @@ int pgcache_destroy( pgcache_t *pgcache){
     return(0);
 }
 
+/* locking call, alloc a cache, start it, and wait for it to be running. */
+int pgcache_enable_sync( pgcache_t *pgcache){
+    int rc = 0; 
+    rc = cache_enable( CACHE(pgcache) );
+    if( rc != 0){
+        TRACE_ERR("Issues in cache_enable()");
+        goto exit1;
+    }
+        
+    rc = cache_wait_for_flags( CACHE( pgcache), 
+                               CACHE_ACTIVE, 
+                               PGCACHE_DEFAULT_TIMEOUT);
+    if( rc != 0){
+        TRACE_ERR("timeout waiting for CACHE_ACTIVE flag");
+    }
+
+exit1:
+    return( rc);
+}
+
+/* pgcache sync map */
+pgcache_element_t *pgcache_element_map_sync( pgcache_t *pgcache, 
+                                             uint64_t addr, 
+                                             int numblocks ){
+    pgcache_element_t *el;
+    int rc = 0;
+
+    el = pgcache_element_map( pgcache, 0, 1);
+    if( el == NULL){
+        TRACE_ERR("Issues in pgcache_element_map()");
+        goto exit1;
+    }
+
+
+    rc = cache_element_wait_for_flags( CACHE_EL(el), 
+                                       CACHE_EL_ACTIVE, 
+                                       PGCACHE_DEFAULT_TIMEOUT);
+    if( rc != 0){
+        cache_element_mark_eviction( CACHE_EL(el));
+        el = NULL;
+        TRACE_ERR("timeout waiting for CACHE_EL_ACTIVE");
+    }
+exit1:
+    return( el);
+}
+
+/* pgcache sync */
+int pgcache_element_sync( pgcache_element_t *el){ 
+    int rc = 0;
+
+    rc = PGCACHE_EL_MARK_DIRTY( el);
+    if( rc != 0){
+        TRACE_ERR("Issues in pgcache_element_mark_dirty()");
+        goto exit1;
+    }
+
+
+    rc = cache_element_wait_for_flags( CACHE_EL(el), 
+                                       CACHE_EL_CLEAN, 
+                                       PGCACHE_DEFAULT_TIMEOUT);
+    if( rc != 0){
+        TRACE_ERR("timeout waiting for CACHE_EL_CLEAN");
+    }
+exit1:
+    return( rc);
+}
 
 

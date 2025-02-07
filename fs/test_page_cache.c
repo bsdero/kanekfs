@@ -17,16 +17,15 @@ int cache_dump( cache_t *cache){
 
     printf("CACHE DUMP:\n");
     for( i = 0; i < cache->ca_elements_capacity; i++){
-        sprintf( s, "%d: ", i);
         el = cache->ca_elements_ptr[i];
         pg_el = ( pgcache_element_t *) el;
         if( el == NULL){
-            strcat( s, "NULL");
+            printf( "%d: NULL\n", i);
         }else{
-            sprintf( s, "%d: %lu", i, el->ce_id);
+            printf( "%d: %lu, dump:\n", i, el->ce_id);
             dumphex( pg_el->pe_mem_ptr, 128);
+            printf("---------------------------------------\n");
         }
-        printf("%s\n", s);
     }
     printf("\n");
     return(0);
@@ -65,46 +64,30 @@ int main( int argc, char **argv){
     }
         
 
-    rc = cache_enable( CACHE(pgcache) );
+    rc = pgcache_enable_sync( pgcache );
     if( rc != 0){
-        TRACE_ERR("Issues in cache_enable()");
+        TRACE_ERR("Issues in pgcache_enable_sync()");
+        pgcache_destroy( pgcache);
         close( fd);
         return( -1);
     }
         
-    rc = cache_wait_for_flags( CACHE( pgcache), CACHE_ACTIVE, 10);
-    if( rc != 0){
-        TRACE_ERR("timeout waiting for CACHE_ACTIVE flag");
-        return( -1);
-    }
-
-
     cache_dump( CACHE( pgcache));
 
 
-    el = pgcache_element_map( pgcache, 0, 1);
+    el = pgcache_element_map_sync( pgcache, 0, 1);
     if( el == NULL){
-        TRACE_ERR("Issues in pgcache_element_map()");
+        TRACE_ERR("Issues in pgcache_element_map_sync()");
+        pgcache_destroy( pgcache);
         close( fd);
         return( -1);
     }
 
 
-    rc = cache_element_wait_for_flags( CACHE_EL(el), 
-                                       CACHE_EL_ACTIVE, 
-                                       10);
-    if( rc != 0){
-        TRACE_ERR("timeout waiting for CACHE_EL_ACTIVE");
-        return( -1);
-    }
-
     strcpy( (char *) el->pe_mem_ptr, s1);
-    cache_element_mark_dirty( CACHE_EL(el));
-    rc = cache_element_wait_for_flags( CACHE_EL(el), 
-                                       CACHE_EL_CLEAN, 
-                                       10);
+    rc = pgcache_element_sync( el);
     if( rc != 0){
-        TRACE_ERR("timeout waiting for CACHE_EL_CLEAN");
+        TRACE_ERR("could not sync cache_element");
         return( -1);
     }
 
@@ -128,7 +111,7 @@ int main( int argc, char **argv){
     }
 
     strcpy( (char *) el->pe_mem_ptr, s2);
-    cache_element_mark_dirty( CACHE_EL(el));
+    PGCACHE_EL_MARK_DIRTY( el);
 
     strcpy( (char *) el2->pe_mem_ptr, s3);
     cache_element_mark_dirty( CACHE_EL(el2));

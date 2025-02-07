@@ -1,0 +1,17 @@
+
+
+
+kfs_metaserv_t *kfs_metaserv_from_sb( sb_t *sb);
+kfs_metaserv_t *kfs_metaserv_from_kfsconf( sb_t *sb);
+int kfs_metaserv_enable( kfs_metaserv_t *metaserv);
+int kfs_metaserv_disable( kfs_metaserv_t *metaserv);
+
+
+slot_t *kfs_slot_alloc(); /* allocate a new, empty slot */  
+int kfs_slot_close( slot_t *slot); /* close a slot, no erase from disk */
+int kfs_slot_lock( slot_t *slot);  /* lock this slot */
+int kfs_slot_unlock( slot_t *slot); /* unlock */
+slot_t *kfs_slot_open( uint64_t slot_id); /* open a specific slot */
+int kfs_slot_sync( slot_t *slot);  /* update slot in disk from dictionary */
+int kfs_slot_evict( slot_t *slot); /* clean slot from disk */
+

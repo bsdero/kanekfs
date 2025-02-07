@@ -8,8 +8,8 @@
 #include <sys/ioctl.h>
 #include <ctype.h>
 #include "kfs.h"
-#include "kfs_io.h"
-#include "kfs_page_cache.h"
+#include "eio.h"
+#include "page_cache.h"
 
 sb_t __sb = { 0};
 

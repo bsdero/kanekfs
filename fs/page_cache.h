@@ -14,7 +14,6 @@ typedef struct{
 }pgcache_element_t;
 
 
-/* generic cache structure */
 typedef struct{
     cache_t pc_cache;
     int pc_fd;
@@ -24,7 +23,7 @@ typedef struct{
 }pgcache_t;
 
 
-/* create and init a cache_t structure */
+/* create and init a page cache_t structure */
 pgcache_t *pgcache_alloc( int fd, int elements_capacity);
 int pgcache_destroy( pgcache_t *pgcache);
 pgcache_element_t *pgcache_element_map( pgcache_t *cache, 

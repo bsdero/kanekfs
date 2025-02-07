@@ -12,7 +12,8 @@
 #include <ctype.h>
 #include "kfs.h"
 #include "map.h"
-#include "kfs_io.h"
+#include "kfs_config.h"
+#include "eio.h"
 
 #define OPT_SIZE                                   0x0001
 #define OPT_NUM_SLOTS                              0x0002

@@ -5,353 +5,168 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include "trace.h"
-#include "kfs_page_cache.h"
-#include "kfs_io.h"
-#include "kfs_slot_cache.h"
+#include "slot_cache.h"
 
-
-/* if flags == 0, it will exit when (cache->ca_flags == 0).
- * if flags != 0, it will exit when (cache->ca_flags & flags == 0)
- * timeout are seconds to exit. If timeout reached, the return code will
- * be != 0.
- *
- */
-int kfs_slotcache_flags_wait( slotcache_t *cache, 
-                              uint32_t flags, 
-                              int timeout_secs){
-    struct timespec start_time, sleep_time, current_time, diff_time;
-    int rc = 0;
-
-
-    clock_gettime( CLOCK_MONOTONIC, &start_time);
-    current_time = start_time;
-    while(1){
-        sleep_time = current_time;
-        sleep_time.tv_nsec += NANOSECS_DELAY;
-        if( sleep_time.tv_nsec >= MILISECS_PER_SECOND){
-            sleep_time.tv_nsec -= MILISECS_PER_SECOND;
-            sleep_time.tv_sec++;
-        }
-        clock_nanosleep( CLOCK_MONOTONIC, TIMER_ABSTIME, &sleep_time, NULL);
-        clock_gettime( CLOCK_MONOTONIC, &current_time);
-
-        timespecsub( &current_time, &start_time, &diff_time);
-        if( diff_time.tv_sec >= timeout_secs){
-            rc = 1;
-            break;
-        }
-
-        if( ( flags == 0 && cache->sc_flags == 0) || 
-            ( flags != 0 && ( ( cache->sc_flags & flags) == flags)) ){
-            rc = 0;
-            break;
-        }
-    }
-
-    return( rc);
+/* NEED SOME WORK */
+void *slcache_on_evict( void *arg){
+    pgcache_element_t *slcache_el = ( pgcache_element_t *) arg;
+    free( pgcache_el->pe_mem_ptr);
+    return( NULL);
 }
 
 
-int kfs_slotcache_element_flags_wait( slotcache_element_t *el, 
-                                       uint32_t flags, 
-                                       int timeout_secs){
 
-    struct timespec start_time, sleep_time, current_time, diff_time;
-    int rc = 0;
+/* NEED SOME WORK */
+void *pgcache_on_flush( void *arg){
+    pgcache_element_t *pgcache_el = ( pgcache_element_t *) arg;
+    pgcache_t *pgcache; 
 
+    pgcache = (pgcache_t *) pgcache_el->pe_el.ce_owner_cache;
 
-    clock_gettime( CLOCK_MONOTONIC, &start_time);
-    current_time = start_time;
-    while(1){
-        sleep_time = current_time;
-        sleep_time.tv_nsec += NANOSECS_DELAY;
-        if( sleep_time.tv_nsec >= MILISECS_PER_SECOND){
-            sleep_time.tv_nsec -= MILISECS_PER_SECOND;
-            sleep_time.tv_sec++;
-        }
-        clock_nanosleep( CLOCK_MONOTONIC, TIMER_ABSTIME, &sleep_time, NULL);
-        clock_gettime( CLOCK_MONOTONIC, &current_time);
+    int rc = extent_write( pgcache->pc_fd, 
+                           pgcache_el->pe_mem_ptr, 
+                           pgcache_el->pe_block_addr, 
+                           pgcache_el->pe_num_blocks);
 
-        timespecsub( &current_time, &start_time, &diff_time);
-        if( diff_time.tv_sec >= timeout_secs){
-            rc = 1;
-            break;
-        }
-
-
-        pthread_mutex_lock( &el->sce_mutex);
-
-        if( ( flags == 0 && el->sce_flags == 0) || 
-            ( flags != 0 && ( ( el->sce_flags & flags) == flags)) ){
-            rc = 0;
-        }
-        pthread_mutex_unlock( &el->sce_mutex);
-
-        if( rc == 0){
-            break;
-        }
-    }
-
-    return( rc);
+    if( rc != 0){
+        TRACE_ERR("extent write error");
+    } 
+    return( NULL);
 }
 
 
-void *kfs_slotcache_loop_thread( void *cache_p){
-    slotcache_t *cache = ( slotcache_t *) cache_p;
-    struct timespec remaining, request;
-    int rc, i;
-    slotcache_element_t *el;
-    uint32_t flags;
-    uint64_t nsec = 100000000L; /*     1/10th of second */
-
-    TRACE("start");
-    cache->sc_tid = pthread_self();
-    cache->sc_flags |= KFS_CACHE_ACTIVE;
-    request.tv_sec = 0;
-    request.tv_nsec = nsec;
 
 
-    do{
-        if( cache->sc_flags & KFS_CACHE_PAUSE_LOOP){
-            request.tv_nsec = 0;
-            request.tv_sec = 1;  /* pause for one second */
-            nanosleep( &request, &remaining);
-            request.tv_sec = 0;
-            request.tv_nsec = nsec;
-            continue;
-        }
- 
-        pthread_mutex_lock( &cache->sc_mutex);
-        cache->sc_flags |= KFS_CACHE_ON_LOOP;
-        for( i = 0; i < cache->sc_elements_capacity; i++){
-            el = &cache->sc_elements[i];
-            flags = el->sce_flags;
-
-            if((flags & KFS_CACHE_ND_ACTIVE) == 0){
-                continue;
-            }
-
-            rc = pthread_mutex_trylock( &el->sce_mutex);
-            if( rc != 0){
-                continue;
-            }
-
-            if( (flags & KFS_CACHE_ND_DIRTY) != 0){
-                /* WRITE SLOT INDEX AND SLOT EXTENT HERE */
-                if( rc != 0){
-                    TRACE_ERR("slot write error");
-                }else{
-                    el->sce_flags &= ~KFS_CACHE_ND_DIRTY;
-                    el->sce_flags |= KFS_CACHE_ND_CLEAN;
-                }
-                TRACE("flushed out");
-            }
-            if( (flags & KFS_CACHE_ND_EVICT) != 0){
-                /* EVICT FREE MEMORY OF SLOT HERE */
-
-                cache->sc_elements_in_use--;
-                el->sce_flags = 0;
-                pthread_mutex_unlock( &el->sce_mutex);
-                pthread_mutex_destroy( &el->sce_mutex);
-            }else{
-                pthread_mutex_unlock( &el->sce_mutex);
-            }
-        }
-
-        cache->sc_flags &= ~KFS_CACHE_ON_LOOP;
-        if( (cache->sc_flags & KFS_CACHE_EXIT_LOOP) != 0){
-            cache->sc_flags |= KFS_CACHE_EVICTED;
-        }
-        pthread_mutex_unlock( &cache->sc_mutex);
-        nanosleep( &request, &remaining);
-
-    }while( (cache->sc_flags & KFS_CACHE_EVICTED) == 0);
-
-
-    cache->sc_flags = ( KFS_CACHE_EXIT_LOOP | KFS_CACHE_EVICTED);
-
-    TRACE("end");
-    pthread_exit( NULL);
-}
-
-
-slotcache_element_t *kfs_slotcache_element_get( slotcache_t *cache, 
-                                        uint64_t addr, 
-                                        int numblocks, 
-                                        uint32_t flags,
-                                        void *(*func)(void *)   ){
+/* NEED SOME WORK */
+slcache_element_t *slcache_element_map( slcache_t *slcache, 
+                                        uint64_t slot_id){
     int i, rc;
-    slotcache_element_t *el;
+    pgcache_element_t *el;
+    cache_element_t *cel;
+    cache_t *cache = (cache_t *) pgcache;
+    void *p;
     
     TRACE("start");
 
-    el = NULL;
 
-    pthread_mutex_lock( &cache->sc_mutex);
+    /* loop in the cache, look if the elements is there already */
+    pthread_mutex_lock( &pgcache->pc_mutex);
+    for( i = 0; i < cache->ca_elements_capacity; i++){
+        cel = cache->ca_elements_ptr[i];
 
-    TRACE("in mutex");
-    /* search an empty cache slot */
-    for( i = 0; i < cache->sc_elements_capacity; i++){
-        el = &cache->sc_elements[i];
-
-        if( (el->sce_flags & KFS_CACHE_ND_ACTIVE) != 0){
+        if( cel == NULL){
             continue;
         }
-
-        break;
+        if( cel->ce_id == addr){ /* element exist */
+            CACHE_EL_ADD_COUNT( cel);
+            el = (pgcache_element_t *) cel;
+            if( numblocks == el->pe_num_blocks){ /* page already mapped */
+                goto exit0;
+            }else{ /* same address, different size, evict */
+                cache_element_evict( cache, addr);
+                el = NULL;
+                cel = NULL;
+            }
+            break;
+        }
     }
 
-    if( el != NULL){
-        /* found a cache slot, fill in all the required data */
+    /* map cache element */
+    p = cache_element_map( CACHE( pgcache), 
+                           sizeof( pgcache_element_t));
+    if( p == NULL){
+        el = NULL;
+        goto exit0;
+    }
+    
+    el = ( pgcache_element_t *) p;
+    el->pe_mem_ptr = malloc( numblocks * KFS_BLOCKSIZE);
+    if( el->pe_mem_ptr == NULL){
+        TRACE_ERR("malloc error");
+        el = NULL;
+        goto exit0;
+    }
 
 
+    rc = extent_read( pgcache->pc_fd, el->pe_mem_ptr, addr, numblocks);
+    if( rc != 0){
+        TRACE_ERR("extent read error");
+        free( el->pe_mem_ptr);
+        el = NULL;
+        goto exit0;
+    }
 
-       if (pthread_mutex_init( &el->sce_mutex, NULL) != 0) { 
-            TRACE_ERR("mutex init has failed");
-            el = NULL;
-            goto exit0;
-        } 
 
-
-
-
-        el->sce_flags = flags | KFS_CACHE_ND_ACTIVE | KFS_CACHE_ND_CLEAN;
+    el->pe_block_addr = addr;
+    el->pe_num_blocks = numblocks;
+    el->pe_el.ce_id = (uint64_t) addr;
  
-        cache->sc_elements_in_use++;
-    }else{
-        TRACE_ERR("cache is full, can not map other extent");
-    }
 exit0:
-
-    pthread_mutex_unlock( &cache->sc_mutex);
+    pthread_mutex_unlock( &pgcache->pc_mutex);
     
     TRACE("end");
     return( el);
 }
 
 
-slotcache_t *kfs_slotcache_alloc( sb_t *sb, int num_elems){
-    slotcache_t *slotcache;
-    void *p;
+/* create and init a slot cache_t structure. Use an already existing 
+ * page cache. 
+ *
+ * */
 
-    TRACE("start");
-
-    
-    slotcache = malloc( sizeof( slotcache_t ));
-    if( slotcache == NULL){
-        TRACE_ERR("Error in malloc()"); 
-        goto exit0;
-    }
-
-    memset( (void *) slotcache, 0, sizeof( slotcache_t));
-
-    p = malloc( sizeof( slotcache_element_t) * num_elems);
-    if( p == NULL){
-        TRACE_ERR("Error in malloc()");
-        goto exit1;
-    }
-
-    memset( p, 0, sizeof( slotcache_element_t) * num_elems);
-   
-    slotcache->sc_elements = p;
-    slotcache->sc_elements_capacity = num_elems;
-    slotcache->sc_elements_in_use = 0;
-    slotcache->sc_sb = sb;
-
-    if (pthread_mutex_init(&slotcache->sc_mutex, NULL) != 0) { 
-        TRACE_ERR("mutex init has failed"); 
-        goto exit1; 
-    } 
-
-    slotcache->sc_flags = KFS_CACHE_READY;
-    goto exit0; 
-
-
-exit1:
-    free( slotcache);
-    slotcache = NULL;
-
-exit0:
-    TRACE("end");
-
-    return( slotcache);
-}
-
-
-
-int kfs_slotcache_start_thread( slotcache_t *cache){
+slcache_t *slcache_alloc( pg_cache_t *pg_cache,
+                          int elements_capacity){
+    slcache_t *sl_cache;
     int rc;
 
     TRACE("start");
 
-    if( (cache->sc_flags & KFS_CACHE_READY) == 0){
-        TRACE_ERR("cache is not ready, abort");
-        return(-1);
+    slcache = malloc( sizeof( slcache_t ));
+    if( slcache == NULL){
+        TRACE_ERR("Error in malloc()"); 
+        goto exit0;
     }
 
-    rc = pthread_create( &cache->sc_thread, 
-                         NULL, 
-                         kfs_slotcache_loop_thread,
-                         cache);
+    memset( (void *) slcache, 0, sizeof( slcache_t));
+    rc = cache_init( &slcache->sc_cache, 
+                     elements_capacity,
+                     slcache_on_evict,
+                     slcache_on_flush);
     if( rc != 0){
-        TRACE_ERR("pthread_create() failed");
-        cache->sc_thread = pthread_self();
-        return( -1);
+        TRACE_ERR("slcache->sc_cache init has failed"); 
+        free( slcache);
+        slcache = NULL;
+        goto exit0;
     }
 
+
+    if( pthread_mutex_init( &slcache->sc_mutex, NULL) != 0) { 
+        TRACE_ERR("mutex init has failed");
+        free( slcache);
+        slcache = NULL;
+        goto exit0;
+    }
+
+    slcache->sc_pgcache = pg_cache;
+
+
+exit0:
     TRACE("end");
-    return(0);
+
+    return( sccache);
 }
 
 
-int kfs_slotcache_destroy( slotcache_t *cache){
-    int i, rc = 0;
-    slotcache_element_t *el;
-    void *ret;
+
+int pgcache_destroy( slcache_t *slcache){
     TRACE("start");
-    if( (cache->sc_flags & KFS_CACHE_READY) == 0){
-        TRACE_ERR("cache is not ready, abort");
-        return(-1);
-    }
-
-    pthread_mutex_lock( &cache->sc_mutex);
-    TRACE("in mutex");
-    for( i = 0; i < cache->sc_elements_capacity; i++){
-        el = &cache->sc_elements[i];
-
-        if((el->sce_flags & KFS_CACHE_ND_ACTIVE) == 0){
-            continue;
-        }
-        /* MARK SLOT AS DIRTY HERE */
-        if( rc != 0){
-            TRACE_ERR("Cache element not active");
-        }
-    }
-    
-    cache->sc_flags |= KFS_CACHE_EXIT_LOOP;    
-    pthread_mutex_unlock( &cache->sc_mutex);
-
-    /* wait for the thread loop to run and remove/sync all the stuff */
-    rc = kfs_slotcache_flags_wait( cache, 
-                                 KFS_CACHE_EXIT_LOOP | KFS_CACHE_EVICTED, 
-                                 10);
-    if( rc != 0){
-        TRACE_ERR("timeout waiting for flags = 0");
-    }
-
-    /* if we are here the thread should be finished already. */
-    if( pthread_equal( cache->sc_thread, cache->sc_tid)){
-        pthread_join( cache->sc_thread, &ret);
-    }
-    
-    pthread_mutex_destroy( &cache->sc_mutex);
-
-    free( cache->sc_elements);
-    free( cache);
+    cache_disable( &slcache->sl_cache);
+    free( slcache);
     TRACE("end");
 
     return(0);
 }
+
 
 
 

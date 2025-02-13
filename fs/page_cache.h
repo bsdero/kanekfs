@@ -29,9 +29,19 @@ typedef struct{
 /* create and init a page cache_t structure */
 pgcache_t *pgcache_alloc( int fd, int elements_capacity);
 int pgcache_destroy( pgcache_t *pgcache);
+
+/* map a number of blocks from the device into memory */
 pgcache_element_t *pgcache_element_map( pgcache_t *cache, 
                                         uint64_t addr, 
                                         int numblocks );
+
+/* get numblocks from memory and map to device. 
+ * Basically is the same than pgcache_element_map() but not reading 
+ * at first from disk, and mapping blank blocks to the specified address */
+pgcache_element_t *pgcache_element_map_zero( pgcache_t *cache,
+                                             uint64_t addr,
+                                             int numblocks);
+
 
 /* locking call, alloc a cache, start it, and wait for it to be running. */
 int pgcache_enable_sync( pgcache_t *pgcache);

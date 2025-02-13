@@ -10,7 +10,7 @@
 /* NEED SOME WORK */
 void *slcache_on_evict( void *arg){
     pgcache_element_t *slcache_el = ( pgcache_element_t *) arg;
-    free( pgcache_el->pe_mem_ptr);
+    slot_destroy( pgcache_el->sce_slot);
     return( NULL);
 }
 
@@ -18,15 +18,14 @@ void *slcache_on_evict( void *arg){
 
 /* NEED SOME WORK */
 void *pgcache_on_flush( void *arg){
-    pgcache_element_t *pgcache_el = ( pgcache_element_t *) arg;
-    pgcache_t *pgcache; 
+    pgcache_element_t *slcache_el = ( pgcache_element_t *) arg;
+    pgcache_t *slcache; 
 
-    pgcache = (pgcache_t *) pgcache_el->pe_el.ce_owner_cache;
+    slcache = (pgcache_t *) slcache_el->pe_el.ce_owner_cache;
 
-    int rc = extent_write( pgcache->pc_fd, 
-                           pgcache_el->pe_mem_ptr, 
-                           pgcache_el->pe_block_addr, 
-                           pgcache_el->pe_num_blocks);
+    rc = kfs_slot_save( slcache->sc_pgcache, 
+                        slot_id, 
+                        slcache_el->sce_slot);
 
     if( rc != 0){
         TRACE_ERR("extent write error");
@@ -38,69 +37,51 @@ void *pgcache_on_flush( void *arg){
 
 
 /* NEED SOME WORK */
-slcache_element_t *slcache_element_map( slcache_t *slcache, 
-                                        uint64_t slot_id){
+slcache_element_t *slcache_slot_map( slcache_t *slcache, 
+                                     uint64_t slot_id){
     int i, rc;
-    pgcache_element_t *el;
-    cache_element_t *cel;
-    cache_t *cache = (cache_t *) pgcache;
+    slcache_element_t *slot_el;
+    cache_element_t *el;
+    cache_t *cache = (cache_t *) slcache;
+    slot_t *slot;
     void *p;
     
     TRACE("start");
 
 
-    /* loop in the cache, look if the elements is there already */
-    pthread_mutex_lock( &pgcache->pc_mutex);
+    /* loop in the cache, look if the slot is there already */
+    pthread_mutex_lock( &slcache->sc_mutex);
     for( i = 0; i < cache->ca_elements_capacity; i++){
         cel = cache->ca_elements_ptr[i];
 
         if( cel == NULL){
             continue;
         }
-        if( cel->ce_id == addr){ /* element exist */
+        if( cel->ce_id == slot_id){ /* element exist */
             CACHE_EL_ADD_COUNT( cel);
-            el = (pgcache_element_t *) cel;
-            if( numblocks == el->pe_num_blocks){ /* page already mapped */
-                goto exit0;
-            }else{ /* same address, different size, evict */
-                cache_element_evict( cache, addr);
-                el = NULL;
-                cel = NULL;
-            }
-            break;
+            el = (slcache_element_t *) cel;
+            goto exit0;
         }
     }
 
     /* map cache element */
-    p = cache_element_map( CACHE( pgcache), 
-                           sizeof( pgcache_element_t));
+    p = cache_element_map( cache, 
+                           sizeof( slcache_element_t));
     if( p == NULL){
         el = NULL;
         goto exit0;
     }
-    
-    el = ( pgcache_element_t *) p;
-    el->pe_mem_ptr = malloc( numblocks * KFS_BLOCKSIZE);
-    if( el->pe_mem_ptr == NULL){
-        TRACE_ERR("malloc error");
-        el = NULL;
-        goto exit0;
-    }
 
+    /* init slot mutex */
+    el = ( cache_element_t *) p;
+    slot_el = ( slcache_element_t *) p;
+    if (pthread_mutex_init(&slot_el->sce_mutex, NULL) != 0) { 
+        TRACE_ERR("mutex init has failed"); 
+        return( -1);
+    } 
 
-    rc = extent_read( pgcache->pc_fd, el->pe_mem_ptr, addr, numblocks);
-    if( rc != 0){
-        TRACE_ERR("extent read error");
-        free( el->pe_mem_ptr);
-        el = NULL;
-        goto exit0;
-    }
-
-
-    el->pe_block_addr = addr;
-    el->pe_num_blocks = numblocks;
-    el->pe_el.ce_id = (uint64_t) addr;
- 
+    slot_el->sce_slot = kfs_slot_load( slcache->sc_pgcache, slot_id);
+    slot_el->slot_id = slot_id;
 exit0:
     pthread_mutex_unlock( &pgcache->pc_mutex);
     
@@ -113,7 +94,6 @@ exit0:
  * page cache. 
  *
  * */
-
 slcache_t *slcache_alloc( pg_cache_t *pg_cache,
                           int elements_capacity){
     slcache_t *sl_cache;

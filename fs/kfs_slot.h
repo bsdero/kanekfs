@@ -1,22 +1,28 @@
-#ifndef _SLOTS_H_
-#define _SLOTS_H_
+#include "kfs.h"
+#include "eio.h"
+#include "page_cache.h"
 
-#include "kfs_super.h"
+
+/* operations with slots in disk device */
 
 
-/* operations with slots */
-slot_t *slot_alloc( uint64_t inode, 
-                    uint16_t edge, 
-                    uint16_t flags);
+/* allot a kfs_slot in the storage device, the slot remains open */ 
+slot_t *kfs_slot_alloc( uint64_t inode, 
+                        uint16_t edge, 
+                        uint16_t flags);
 
-int slot_peek( uint64_t slot_id, dict_d *dict); /* open, read, close a slot */
 
+/* peek data from a slot in disk */
+int kfs_slot_peek( uint64_t slot_id, dict_d *dict); 
 int slot_peek_owner( uint64_t slot_id, 
                      uint64_t *inode,
                      uint16_t *edge,
                      uint16_t *flags);
 
-slot_t *slot_open( uint64_t slot_id); /* open and read a slot */
+
+/* open a kfs_slot from the storage device, and read data into slot_t,
+ * slot remains open and need to be closed*/
+slot_t *slot_open( uint64_t slot_id);
 int slot_set_owner( slot_t *s, 
                     uint64_t inode, 
                     uint16_t edge, 
@@ -91,4 +97,4 @@ int slot_evict( uint64_t slot_id); /* evict a slot from storage*/
  *
  */
 
-#endif
+

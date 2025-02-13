@@ -44,6 +44,7 @@ typedef struct{
 }extent_t;
 
 /* slots and slot table definition */
+typedef struct
 typedef struct{
     uint64_t slot_id;
     uint64_t slot_sino_owner;

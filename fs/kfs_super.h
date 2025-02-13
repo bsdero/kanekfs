@@ -22,12 +22,12 @@
 #define kfs_get_sb()                     ( &__sb)
 
 int kfs_verify( char *filename, int verbose, int extra_verification);
-int kfs_load_superblock( kfs_superblock_t *kfs_sb, sb_t *sb);
 int kfs_mount( kfs_config_t *config);
 int kfs_active();
 void kfs_superblock_display();
 int kfs_umount();
 int kfs_superblock_update();
+
 
 
 /* super block operations */
@@ -50,21 +50,6 @@ void kfs_sb_evict_inode( sinode_t *sinode);
 void kfs_sb_evict_slot( slot_t *slot);
 
 
-/* operations with slots */
-slot_t *kfs_slot_new(); /* reserve a new slot */
-int kfs_slot_get( uint64_t slot_id, slot_t *slot);
-int kfs_slot_get_locked( uint64_t slot_id, slot_t *slot);
-void slot_set_owner_inode( slot_t *s, uint64_t inode);
-void slot_set_owner_inode_edge( slot_t *s, uint64_t inode, uint64_t edge);
-void slot_set_owner_inode_edge_s( slot_t *s, uint64_t inode, char *es);
-void slot_set_dict( slot_t *s, dict_t d);
-
-void kfs_slot_dump( slot_t *slot);
-int kfs_slot_insert_cache( slot_t *slot);
-int kfs_slot_dirty( slot_t *slot);
-int kfs_slot_put( slot_t *slot);
-int kfs_slot_write( slot_t *slot);
-int kfs_slot_evict( slot_t *slot);
 
 /* Operations with super inodes */
 sinode_t kfs_sinode_alloc();

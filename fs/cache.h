@@ -129,9 +129,6 @@ typedef struct{
     void *(*ca_on_map_callback)(void *);    /* on map */
     void *(*ca_on_evict_callback)(void *);  /* on evict */
     void *(*ca_on_flush_callback)(void *);  /* on flush */
- 
-    /* pointer to extra data for this cache operation */
-    void *ca_data;
 }cache_t;
 
 
@@ -147,27 +144,65 @@ cache_t *cache_alloc( int elements_capacity,
                       void *(*on_flush)(void *));
 
 /* start the cache thread */
-
 int cache_enable( cache_t *cache);
+
+/* disable thread, evict all the elements, close all */
 int cache_disable( cache_t *cache);
+
+/* clear cache flag LOOP_DONE */
 int cache_clear_loop_done( cache_t *cache);
+
+
+/* same than cache_disable(), but also frees the cache pointer */
 int cache_destroy( cache_t *cache);
+
+/* evict all the elements in cache, except pinned elements */
 int cache_sync( cache_t *cache);
+
+/* pause cache thread */
 int cache_pause( cache_t *cache);
+
+/* unpause thread */
 int cache_clear_pause( cache_t *cache);
+
+/* wait until the specified flags are enabled or zero. 
+ * if flags == 0, it will exit when (cache->ca_flags == 0).
+ * if flags != 0, it will exit when the flags are active.
+ * timeout are seconds to exit. If timeout reached, the return code will
+ * be != 0.
+ */
 int cache_wait_for_flags( cache_t *cache, uint32_t flags, int timeout_secs);
+
+/* look for an element in the cache */
 cache_element_t *cache_lookup( cache_t *cache, uint64_t key);
 
 
+
+/* functions for cache elements */
+
+/* map an element in the cache. */
 cache_element_t *cache_element_map( cache_t *cache, size_t byte_size);
+
+/* mark for eviction in the next thread loop */
 int cache_element_mark_eviction( cache_element_t *ce);
+
+/* mark for flush in the next thread loop */
 int cache_element_mark_dirty( cache_element_t *ce);
+
+/* dont remove, useful for cache elements which needs to be open */
 int cache_element_pin( cache_element_t *ce);
+
+/* if not pinned, any element may be removed in a sync or when a cache 
+ * eviction is needed. */ 
 int cache_element_un_pin( cache_element_t *ce);
+
+/* wait for conditions but in the cache element, not the cache data 
+ * structure*/
 int cache_element_wait_for_flags( cache_element_t *ce, 
                                   uint32_t flags, 
                                   int timeout_secs);
 
+/* explicit eviction of a cache element */
 void cache_element_evict( cache_t *cache, uint64_t key);
 #endif
 

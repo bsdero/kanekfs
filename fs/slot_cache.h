@@ -17,10 +17,10 @@
 
 
 typedef struct{
-    pgcache_element_t *sce_index;  /* cached page to slot index */
-    pgcache_element_t *sce_extent; /* cached page to slot extent */
+    cache_element_t sce_el;
     pthread_mutex_t sce_mutex;
     slot_t *sce_slot;
+    uint64_t slot_id;
 }slcache_element_t;
 
 
@@ -38,8 +38,10 @@ typedef struct{
 slcache_t *slcache_alloc( pg_cache_t *pg_cache, 
                           int elements_capacity);
 int slcache_destroy( slcache_t *slcache);
-slcache_element_t *slcache_element_map( slcache_t *slcache, uint64_t slot_id);
-slcache_element_t *slcache_element_alloc( slcache_t *slcache);
+
+
+slcache_element_t *slcache_slot_map( slcache_t *slcache, uint64_t slot_id);
+slcache_element_t *slcache_slot_alloc( slcache_t *slcache);
 
 
 #endif

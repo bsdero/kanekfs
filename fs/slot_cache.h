@@ -18,9 +18,7 @@
 
 typedef struct{
     cache_element_t sce_el;
-    pthread_mutex_t sce_mutex;
     slot_t *sce_slot;
-    uint64_t slot_id;
 }slcache_element_t;
 
 

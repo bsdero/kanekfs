@@ -14,7 +14,7 @@ LIBKFS=libkfs.a
 TESTS=testdict testrand testhash testdh testgc testmap testsizes \
       test_cache test_page_cache test_kfs_mount
 
-TOOLS=kfs_mkfs kfs_info kfs_server kfs_set_sb_meta
+TOOLS=help_build kfs_mkfs kfs_info kfs_server kfs_set_sb_meta
 
 all: tests tools
 
@@ -54,7 +54,8 @@ kfs_server: kfs_server.o $(LIBKFS)
 kfs_set_sb_meta: kfs_set_sb_meta.o $(LIBKFS)
 	$(CC) -o kfs_set_sb_meta kfs_set_sb_meta.o $(LDFLAGS)
 
-
+help_build:
+	$(CC) -o help_build help_build.c
 
 
 

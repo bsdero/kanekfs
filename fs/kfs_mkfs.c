@@ -15,30 +15,40 @@
 #include "kfs_config.h"
 #include "eio.h"
 
-#define OPT_SIZE                                   0x0001
-#define OPT_NUM_SLOTS                              0x0002
-#define OPT_NUM_SINODES                            0x0004
-#define OPT_CALCULATE                              0x0008
-#define OPT_PERCENTAGE                             0x0020
-#define OPT_VERBOSE                                0x0040
-#define OPT_HELP                                   0x0080
+#define CMD_KFS                                    0x000001
+#define CMD_META                                   0x000002
+#define CMD_OST                                    0x000004
+#define CMD_GRAPH                                  0x000008
+#define OPT_V                                      0x000010
+#define OPT_H                                      0x000020
+#define OPT_F                                      0x000040
+#define OPT_D                                      0x000080
+#define OPT_I                                      0x000100
+#define OPT_S                                      0x000200
+#define OPT_P                                      0x000400
+#define OPT_W                                      0x000800
+#define OPT_M                                      0x001000
+#define OPT_K                                      0x002000
+#define OPT_X_ITEMS                                0x004000
+#define OPT_X_BLOCKS                               0x008000
 
-#define MKFS_CREATE_FILE                           0x0100
-#define MKFS_IS_BLOCKDEVICE                        0x0200
-#define MKFS_IS_REGULAR_FILE                       0x0400
+#define MKFS_CREATE_FILE                           0x100000
+#define MKFS_IS_BLOCKDEVICE                        0x200000
+#define MKFS_IS_REGULAR_FILE                       0x400000
 
 #define MKFS_DEFAULT_PERCENTAGE                    10
 
 
-
-
 uint64_t blocks_per_block = KFS_BLOCKSIZE * 8;
 typedef struct{
-    char filename[240];
+    char file_name[240];
+    char conf_file[240];
+    char metadata_file[240];
     char str_size[32];
     char str_slots_num[24];
     char str_sinodes_num[24];
     char str_percentage[10];
+    char str_key[20];
     uint64_t sinodes_num;
     uint64_t slots_num;
     uint64_t size;
@@ -75,75 +85,13 @@ blocks_calc_t blocks_calc;
                                         fprintf( stdout,                    \
                                                  fmt"\n", ##__VA_ARGS__);   \
                                      }                                      \
-                                 } \
+                                 } 
 
 
-int display_help(){
-    char *help[]={
-        "Usage: kfs_mkfs [options] file_name",
-        "",
-        "    Options:",
-        "      -s fs_size        File size",
-        "      -i sino_num       Number of Super Inodes",
-        "      -n slot_num       Number of Metadata Slots", 
-        "      -c                Calc number of items",
-        "      -p percentage     super inodes and slots percentage", 
-        "      -v                Verbose mode",
-        "      -h                Help",
-        "",
-        "    kfs_mkfs creates a kfs filesystem in the specified file name.",
-        "    It works with the next conditions:                           ",
-        "                                                                 ",
-        "      -If <file_name> does not exist, will use the [fs_size]     ",
-        "       argument to create the file.                              ", 
-        "",
-        "      -If <file_name> already exists and is a regular file, will ",
-        "       create a filesystem within the file capacity, except the  ",
-        "       [fs_size] argument is specified. In this case the next    ",
-        "       rules apply:                                              ",
-        "         -If [fs_size] argument is bigger than the file size,    ",
-        "          zeros will be appended to the file.                    ",
-        "         -If [fs_size] argument is lesser or equal than the file ",
-        "          size, the filesystem will be created within the file   ",
-        "          capacity.                                              ",
-        "",
-        "      -For the [-s fs_size], the expected value is the size in   ",
-        "       MBytes. Also the characters 'M' and 'G' after the number  ",
-        "       specifies if we refer to MBytes or GBytes. Examples:      ",
-        "       20    20 MByes,                                           ",
-        "       512M  512 MBytes,                                         ",
-        "       8G    8 GBytes                                            ", 
-        "",
-        "      -If <file_name> is a block device, will create a filesystem",
-        "       within the file capacity, except the [fs_size] argument   ",
-        "       is specified. If this is the case, the [fs_size] should be",
-        "       lesser than or equal the block device capacity, and the   ",
-        "       filesystem will be created within the block device        ",
-        "       capacity.                                                 ",
-        "",
-        "      -If [-c] option is specified, nothing is touched, but the  ",
-        "       number of slots, super inodes, blocks, etc required, is   ",
-        "       shown. If the [fs_size] is passed, and/or the size        ",
-        "       detected, the number of slots and superinodes and used    ",
-        "       blocks are shown. If the [sino_num] or [slot_num] of both ",
-        "       are passed, the calculations showns the number of blocks  ", 
-        "       and device size which is required for that calculations.  ",
-        "",
-        "      -If [-p] is specified, that percentage is used for the     ",
-        "       super inodes and slots. The default is about 12%. It needs",
-        "       to know the disk size before, so it can be used with -s   ",
-        "       and -c.",
-        "",
-        "      -Options [-s, -i, -n, -c] can be used together.",
-        "",       
-        "      <bsdero@gmail.com>",
-        "",
-        "",
-        "-------------------------------------------------------------------",
-        NULL
-    };
+extern help_mkfs, help_mkfs_kfs, help_mkfs_meta, help_mkfs_ost;
+extern help_mkfs_graph, help_mkfs_gennotes;
 
-    char **s = help;
+int display_help( char **s){
     while( *s){
         printf( "%s\n", *s++);
     }
@@ -229,6 +177,8 @@ int build_superblock( int fd){
     /* Build the super block */ 
     memset( (void *) sb, 0, sizeof( kfs_superblock_t ));
     current_time = time( NULL);
+    sb->sb_file_header.kfs_magic = KFS_MAGIC;
+    
     sb->sb_magic = KFS_MAGIC;
     sb->sb_version = 0x000001;
     sb->sb_flags = 0x0000;
@@ -726,6 +676,12 @@ int compute_blocks(){
     uint64_t sinodes_per_block;
     uint64_t sinodes_blocks, sinodes_map_blocks;
     uint64_t bits_per_block, rem, n;
+    float factor = 1.0; /* divisor for both slots and super inodes */
+
+    /* if we have metadata slots, super inodes and all in a single file*/
+    if( options.flags & OPT_SINGLE){
+        factor = 2.0;
+    }
 
     /* clean ddata structure */
     memset( ( void *) bc, 0, sizeof( blocks_calc_t));
@@ -756,9 +712,12 @@ int compute_blocks(){
     /* now calculate how many bits per block can our bitmap have */
     bits_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) * 8;
 
+
+
     /* add super block */
-    total_blocks_required = 1;
- 
+    if( options.flags & OPT_GRAPH){
+        total_blocks_required++;
+    }
 
     /* given the file/device size, and the percentage, calculate how
      * many super inodes and slots do we need */
@@ -766,11 +725,15 @@ int compute_blocks(){
 
         /* calculate how many blocks for slots do we have */
         slots_blocks = (uint64_t) ( (float)bc->in_file_size_in_blocks * 
-                        (( float) bc->in_percentage / 100.0) / 2.0);
+                        (( float) bc->in_percentage / 100.0) / factor);
         sinodes_blocks = slots_blocks;  /* same for sinodes table blocks */
 
         /* sum the total blocks required now */
-        total_blocks_required += slots_blocks + sinodes_blocks;
+        if( options.flags & OPT_META){
+            total_blocks_required += slots_blocks;
+        }else if( options.flags & OPT_OBJ){
+            total_blocks_required += sinodes_blocks;
+        }
 
         /* how many blocks our slots map need */
         rem = (( slots_blocks % bits_per_block) == 0 ) ? 0 : 1;
@@ -849,59 +812,109 @@ int compute_blocks(){
 
 /* parse the passed options */
 int parse_opts( int argc, char **argv){
-    int opt, flags; 
+    int opt, flags, mask; 
     struct stat st;
     int rc;
     int need_file = 1;
+    char **options;
+    char *command;
 
     flags = 0;
-    char opc[] = "s:i:n:cp:vh";
+    char opc[] = "f:d:i:s:p:k:w:m:xvh";
     memset( (void *) &options, 0, sizeof( options_t));
 
-    if( argc == 0){
-        fprintf(stderr, "ERROR: invalid number of arguments.\n");
-        display_help();
+    if( argc <= 1){
+        TRACE_ERR( "invalid number of arguments.");
+        display_help( help_mkfs);
         exit( EXIT_FAILURE);
     }      
 
     
+    command = argv[1];
+    if( strncmp(command, "kfs", 3) == 0){
+        flags |= CMD_KFS;
+    }else if( strncmp( command, "meta", 4) == 0){
+        flags |= CMD_META;
+    }else if( strncmp( command, "ost", 3) == 0){
+        flags |= CMD_OST;
+    }else if( strncmp( command, "graph", 5) == 0){
+        flags |= CMD_GRAPH;
+    }else{
+        TRACE_ERR( "Invalid command '%s'", command);
+        display_help( help_mkfs);
+        exit( EXIT_FAILURE);
+    }
+
+
+    options = argv;
+    options++;
     while ((opt = getopt(argc, argv, opc )) != -1) {
         switch (opt) {
-            case 's':
-                flags |= OPT_SIZE;
+            case 'f':
+                flags |= OPT_F;
+                strcpy( options.file_name, optarg);
+                break;
+            case 'd':
+                flags |= OPT_D;
                 strcpy( options.str_size, optarg);
                 break;
             case 'i':
-                flags |= OPT_NUM_SINODES;
+                flags |= OPT_I;
                 strcpy( options.str_sinodes_num, optarg);
                 break;
-            case 'n':
-                flags |= OPT_NUM_SLOTS;
+            case 's':
+                flags |= OPT_S;
                 strcpy( options.str_slots_num, optarg);
                 break;
             case 'p':
-                flags |= OPT_PERCENTAGE;
+                flags |= OPT_P;
                 strcpy( options.str_percentage, optarg);
                 break;
-            case 'v':
-                flags |= OPT_VERBOSE;
+            case 'k':
+                flags |= OPT_K;
+                strcpy( options.str_key, optarg);
                 break;
-            case 'c':
-                flags |= OPT_CALCULATE;
+            case 'w':
+                flags |= OPT_W;
+                strcpy( options.conf_file, optarg);
+                break;
+            case 'm':
+                flags |= OPT_M;
+                strcpy( options.metadata_file, optarg);
+                break;
+            case 'x':
+                if( strncmp( optarg, "blocks", 6) == 0){
+                    flags |= OPT_X_BLOCKS;
+                }if( strncmp( optarg, "items", 5) == 0){
+                    flags |= OPT_X_ITEMS;
+                }else{
+                    TRACE_ERR( "Invalid option for -x argument");
+                    display_help( help_mkfs);
+                    exit( EXIT_FAILURE);
+                }
+                strcpy( options.metadata_file, optarg);
+                break;
+            case 'v':
+                flags |= OPT_V;
                 break;
             case 'h':
-                flags |= OPT_HELP;
+                flags |= OPT_H;
                 break;
             default: /* '?' */
-                fprintf(stderr, "ERROR: invalid argument.\n");
-                display_help();
+                TRACE_ERR( "invalid argument.");
+                display_help( help_mkfs);
                 exit(EXIT_FAILURE);
         }
     }
 
     /* if help required, display help and exit, no errors */
-    if( flags == OPT_HELP){
-        display_help();
+    if( flags & OPT_H){
+        if( flags & CMD_KFS){
+            display_help( help_mkfs_kfs );
+        }else if( flags & CMD_META){
+
+            display_help( help_mkfs_kfs );
+        }
         exit( 0);
     }
 
@@ -930,14 +943,35 @@ int parse_opts( int argc, char **argv){
          ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SINODES)) == 
                     ( OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
          ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ==
-                    ( OPT_PERCENTAGE | OPT_NUM_SLOTS))
+                    ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ||
 
+         /* -g can not go with -i or -s */
+         ( (flags & ( OPT_GRAPH | OPT_NUM_SLOTS)) ==
+                    ( OPT_GRAPH | OPT_NUM_SLOTS)) ||
+         ( (flags & ( OPT_GRAPH | OPT_NUM_SINODES)) ==
+                    ( OPT_GRAPH | OPT_NUM_SINODES)) ||
+
+         /* -o can not go with -s */
+         ( (flags & ( OPT_OBJ | OPT_NUM_SLOTS)) ==
+                    ( OPT_OBJ | OPT_NUM_SLOTS)) ||
+
+         /* -m can not go with -i */
+         ( (flags & ( OPT_META | OPT_NUM_SINODES)) ==
+                    ( OPT_META | OPT_NUM_SINODES)) ||
+
+         /* -m, -o or -g should go with -k, always */
+         ( (flags & ( OPT_META | OPT_GRAPH | OPT_OBJ) != 0) && 
+            (flags & OPT_KEY == 0)) 
         ){
         fprintf( stderr, "Invalid options combination.\n");
         display_help();
         exit( EXIT_FAILURE);
     }
 
+
+    if( ( flags & ( OPT_META | OPT_OBJ | OPT_GRAPH)) == 0){
+        flags |= (OPT_META | OPT_OBJ | OPT_GRAPH | OPT_SINGLE); /* a file system in a single file */
+    }
 
     if( need_file != 0){
         strcpy( options.filename, argv[optind]);
@@ -1029,6 +1063,7 @@ int parse_opts( int argc, char **argv){
             options.flags |= OPT_SIZE;
         }
     }
+
 
 
     if( options.flags & (OPT_VERBOSE|OPT_CALCULATE)){

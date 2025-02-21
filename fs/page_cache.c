@@ -13,7 +13,9 @@
 
 void *pgcache_on_evict( void *arg){
     pgcache_element_t *pgcache_el = ( pgcache_element_t *) arg;
-    free( pgcache_el->pe_mem_ptr);
+    if( pgcache_el->pe_mem_ptr != NULL){
+        free( pgcache_el->pe_mem_ptr);
+    }
     return( NULL);
 }
 
@@ -100,8 +102,7 @@ pgcache_element_t *pgcache_element_map( pgcache_t *pgcache,
 
     /* if we are here, the required page is not cached. Lets fix that. */
     /* map cache element */
-    p = cache_element_map( CACHE( pgcache), 
-                           sizeof( pgcache_element_t));
+    p = cache_element_map( CACHE( pgcache), sizeof( pgcache_element_t));
     if( p == NULL){
         el = NULL;
         goto exit0;
@@ -111,6 +112,7 @@ pgcache_element_t *pgcache_element_map( pgcache_t *pgcache,
     el->pe_mem_ptr = malloc( numblocks * KFS_BLOCKSIZE);
     if( el->pe_mem_ptr == NULL){
         TRACE_ERR("malloc error");
+        cache_element_mark_eviction( CACHE_EL( el));
         el = NULL;
         goto exit0;
     }
@@ -120,6 +122,8 @@ pgcache_element_t *pgcache_element_map( pgcache_t *pgcache,
     if( rc != 0){
         TRACE_ERR("extent read error");
         free( el->pe_mem_ptr);
+        el->pe_mem_ptr = NULL;
+        cache_element_mark_eviction( CACHE_EL( el));
         el = NULL;
         goto exit0;
     }
@@ -242,6 +246,7 @@ exit0:
 
 int pgcache_destroy( pgcache_t *pgcache){
     TRACE("start");
+    pthread_mutex_destroy( &pgcache->pc_mutex);
     cache_disable( &pgcache->pc_cache);
     free( pgcache);
     TRACE("end");

@@ -4,6 +4,8 @@
 #include "kfs_super.h"
 
 
+
+
 /* operations with slots */
 slot_t *slot_alloc( uint64_t inode, 
                     uint16_t edge, 
@@ -21,8 +23,10 @@ int slot_set_owner( slot_t *s,
                     uint64_t inode, 
                     uint16_t edge, 
                     uint16_t flags);
-int slot_set_dict( slot_t *s, dict_t d); /* write key-values into slot */
+int slot_set_dict( slot_t *s, dict_t d); /* set new key-values to slot */
 int slot_dump( slot_t *slot); /* dump slot */
+int slot_destroy( slot_t *slot);
+int slot_write( slot_t *slot); /* flush the slot to disk */
 int slot_close( slot_t *slot); /* close slot */
 int slot_evict( uint64_t slot_id); /* evict a slot from storage*/
 /**************************************************************************

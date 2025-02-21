@@ -45,8 +45,8 @@
  *
  * After a kfs_extent_header_t, we may have kfs_extent_t entries or 
  * another struct descripting a slots/sinodes table or both. Depends on 
- * what are we using the extent for, and we know what to read an how depending
- * on the value in the field 'magic'. 
+ * what are we using the extent for, and we know what should be read an how 
+ * depending on the value in the field 'magic'. 
  *
  * So, we can store data directly in the same block or have single, double, 
  * triple or nth indirect block pointers, which points to extents, conforming
@@ -131,6 +131,30 @@
  *
  * All the blocks/extents used for store tables data must have a table_header. 
  */
+
+/* This data structure should be at the beginning of all the KFS
+ * data structures on storage. */
+typedef struct{
+    uint32_t kfs_magic;  /* always should be KFS_MAGIC */
+#define KFS_HAVE_META                              0x01 /* slots */
+#define KFS_HAVE_OBJ                               0x02 /* super inodes */
+#define KFS_HAVE_GRAPH                             0x04 /* graph */
+#define KFS_HAVE_SB                                0x08 /* super block */
+
+#define KFS_HAVE_ALL           (KFS_HAVE_META|KFS_HAVE_OBJ|KFS_HAVE_GRAPH|\
+                                KFS_HAVE_SB)
+
+    uint32_t kfs_stg_magic;   /* set the main purpose of the file. 
+                                 If the file has metadata, super inodes
+                                 and the file system graph, KFS_GRAPH 
+                                 should be used in combination with 
+                                 in the file */
+
+    uint64_t key;     /* key. superblock, graph, inodes and slots should
+                         have the same key */
+    uint64_t version;   
+}kfs_file_header_t;
+
 
 
 typedef struct{
@@ -302,13 +326,16 @@ typedef kfs_table_t kfs_si_table_t;
 typedef kfs_table_t kfs_blockmap_t;
 
 typedef struct{
-    uint64_t sb_magic; 
-    uint32_t sb_version;
+    kfs_file_header_t sb_file_header;
+
+#define KFS_SUPERBLOCK_MAGIC                       0x0c01a73
+    uint32_t sb_magic; 
 
 #define KFS_SB_SINODES_NUM_FIXED                   0x0001
 #define KFS_SB_SLOTS_NUM_FIXED                     0x0002
 #define KFS_SB_AUTO_DEFRAG                         0x0004
 #define KFS_IS_MOUNTED                             0x0008
+
 
     uint32_t sb_flags;
     uint64_t sb_root_super_inode; /* any inode can be the root inode */

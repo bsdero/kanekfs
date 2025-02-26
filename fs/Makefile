@@ -92,7 +92,7 @@ test_page_cache: test_page_cache.o dumphex.o page_cache.o utils.o eio.o \
 	$(CC) -o test_page_cache test_page_cache.o dumphex.o eio.o page_cache.o \
 		cache.o -lpthread
 
-mkfs_help.o:
+mkfs_help.o: mkfs_help.c
 	$(CC) -c mkfs_help.c
 
 

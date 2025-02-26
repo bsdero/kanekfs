@@ -17,7 +17,7 @@
 
 #define CMD_KFS                                    0x000001
 #define CMD_META                                   0x000002
-#define CMD_OST                                    0x000004
+#define CMD_SIS                                    0x000004
 #define CMD_GRAPH                                  0x000008
 #define OPT_V                                      0x000010
 #define OPT_H                                      0x000020
@@ -89,7 +89,7 @@ blocks_calc_t blocks_calc;
 
 
 extern char **help_mkfs, **help_mkfs_kfs, **help_mkfs_meta;
-extern char **help_mkfs_ost, **help_mkfs_graph, **help_mkfs_gennotes;
+extern char **help_mkfs_sis, **help_mkfs_graph, **help_mkfs_gennotes;
 
 int display_help( char **help){
     char **s = help;
@@ -667,7 +667,7 @@ int blocks_results_display(){
  * inodes will be created, or the device size required. Also fill in 
  * how many blocks are required for the corresponding tables and bitmaps. 
  */
-int compute_blocks(){
+int compute_values(){
     blocks_calc_t *bc = &blocks_calc;
 
     uint64_t total_blocks_required = 0, bitmap_size_in_blocks = 0;
@@ -676,12 +676,9 @@ int compute_blocks(){
     uint64_t sinodes_per_block;
     uint64_t sinodes_blocks, sinodes_map_blocks;
     uint64_t bits_per_block, rem, n;
-    float factor = 1.0; /* divisor for both slots and super inodes */
 
-    /* if we have metadata slots, super inodes and all in a single file*/
-    if( options.flags & (OPT_I|OPT_S)){
-        factor = 2.0;
-    }
+    float items_blocks;
+
 
     /* clean ddata structure */
     memset( ( void *) bc, 0, sizeof( blocks_calc_t));
@@ -689,15 +686,16 @@ int compute_blocks(){
     /* fill in sizes */
     bc->in_file_size_in_blocks = options.size / KFS_BLOCKSIZE;
     bc->in_file_size_in_mbytes = options.size / _1M;
- 
+
+
     if( options.flags & (OPT_I|OPT_S)){
-        
         bc->in_sinodes_num = options.sinodes_num; 
         bc->in_slots_num = options.slots_num;
     }
     
-
-    bc->in_percentage = options.percentage;
+    if( options.flags & OPT_P){
+        bc->in_percentage = options.percentage;
+    }
  
     /* do first real computations */
     slots_per_block = (KFS_BLOCKSIZE - sizeof( kfs_extent_header_t)) / 
@@ -714,88 +712,116 @@ int compute_blocks(){
 
 
 
-    /* add super block */
-    if( options.flags & (CMD_META) ){
+    
+    total_blocks_required = 0;
+
+    /* add the super block at first */
+    if( options.flags & (CMD_META|CMD_KFS) ){
         total_blocks_required++;
     }
 
-    /* given the file/device size, and the percentage, calculate how
-     * many super inodes and slots do we need */
-    if( bc->in_sinodes_num == 0 && bc->in_slots_num == 0){
+    /* if we will create a full KFS in a single file, metadata slots, or
+     * object storage (super inodes), we need to calculate how many
+     * slots and super inodes do we need. This does not apply for
+     * files graph creation. */
+    if( options.flags & (CMD_KFS|CMD_META|CMD_SIS)){
 
-        /* calculate how many blocks for slots do we have */
-        slots_blocks = (uint64_t) ( (float)bc->in_file_size_in_blocks * 
-                        (( float) bc->in_percentage / 100.0) / factor);
-        sinodes_blocks = slots_blocks;  /* same for sinodes table blocks */
 
-        /* sum the total blocks required now */
-        if( options.flags & CMD_META){
+        /* calculate how many blocks do we need for items, in function of 
+         * percentage */
+        items_blocks = (float) bc->in_file_size_in_blocks * 
+                        (( float) bc->in_percentage / 100.0);
+
+        /* if we have KFS mode, we will have metadata slots and super inodes
+         * in a single file. */
+        if( options.flags & CMD_KFS){
+            items_blocks = items_blocks / 2.0;
+        }
+
+        /* calculate slots */ 
+        if( (options.flags & (CMD_KFS|CMD_META)) && 
+            (options.flags & OPT_S) == 0){
+            slots_blocks = (uint64_t) items_blocks;
+
+            /* add slots blocks to the total of slots */
             total_blocks_required += slots_blocks;
-        }else if( options.flags & CMD_OST){
-            total_blocks_required += sinodes_blocks;
-        }
 
-        /* how many blocks our slots map need */
-        rem = (( slots_blocks % bits_per_block) == 0 ) ? 0 : 1;
-        slots_map_blocks = ( slots_blocks / bits_per_block) + rem;
-                           
-        /* real number of blocks for slots we have */
-        slots_blocks -= slots_map_blocks;
-
-        bc->out_slots_bitmap_blocks_num = slots_map_blocks;
-        bc->out_slots_table_in_blocks = slots_blocks;
-        bc->out_slots_num = slots_blocks * slots_per_block;
-
-        /* calculate how many super inodes are available, from the file size 
-         * in blocks  */
- 
-        /* how many blocks our super inodes map need */
-        rem = (( sinodes_blocks % bits_per_block) == 0) ? 0 : 1;
-        sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + rem;
-
-        /* real number of blocks for super inodes we have */
-        sinodes_blocks -= sinodes_map_blocks;
-
-        bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
-        bc->out_sinodes_table_in_blocks = sinodes_blocks;
-        bc->out_sinodes_num = sinodes_blocks * sinodes_per_block;
-    }else{ /* we have a fixed number of super inodes and slots passed in
-              from the CLI, so calculate how many blocks are required and 
-              how big the file/device should  be. */
-        if( bc->in_sinodes_num != 0){
-            rem = (( bc->in_sinodes_num % sinodes_per_block) == 0) ? 0 : 1; 
-            sinodes_blocks = ( bc->in_sinodes_num / sinodes_per_block) + rem;
-
-            rem = (( sinodes_blocks % bits_per_block) == 0) ? 0 : 1; 
-            sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + rem;
-            bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
-            bc->out_sinodes_table_in_blocks = sinodes_blocks;
-            total_blocks_required += sinodes_map_blocks + sinodes_blocks;
-            bc->out_sinodes_num = sinodes_blocks * sinodes_per_block;
-
-        }
-
-        if( bc->in_slots_num != 0){
-            rem = (( bc->in_slots_num % slots_per_block) == 0) ? 0 : 1;
-            slots_blocks = ( bc->in_slots_num / slots_per_block) + rem;
             /* how many blocks our slots map need */
-            rem = ( ( slots_blocks % bits_per_block) == 0) ? 0 : 1;
+            rem = (( slots_blocks % bits_per_block) == 0 ) ? 0 : 1;
             slots_map_blocks = ( slots_blocks / bits_per_block) + rem;
+                           
+            /* real number of blocks for slots we have */
+            slots_blocks -= slots_map_blocks;
+
+            /* blocks for the slot map */
             bc->out_slots_bitmap_blocks_num = slots_map_blocks;
+
+            /* blocks for the slots table */
             bc->out_slots_table_in_blocks = slots_blocks;
-            total_blocks_required += slots_map_blocks + slots_blocks;
+
+            /* number of available slots */
             bc->out_slots_num = slots_blocks * slots_per_block;
         }
 
+
+        /* calculate super inodes */ 
+        if( (options.flags & (CMD_KFS|CMD_META)) && 
+            (options.flags & OPT_I) == 0){
+            sinodes_blocks = (uint64_t) items_blocks;
+
+            /* add sinodes blocks to the total of sinodes */
+            total_blocks_required += sinodes_blocks;
+
+            /* how many blocks our sinodes map need */
+            rem = (( sinodes_blocks % bits_per_block) == 0 ) ? 0 : 1;
+            sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + rem;
+                           
+            /* real number of blocks for sinodes we have */
+            sinodes_blocks -= sinodes_map_blocks;
+
+            /* blocks for the sinodes map */
+            bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
+
+            /* blocks for the sinodes table */
+            bc->out_sinodes_table_in_blocks = sinodes_blocks;
+
+            /* number of available sinodes */
+            bc->out_sinodes_num = sinodes_blocks * sinodes_per_block;
+        }
+        sinodes_blocks = slots_blocks;  /* same for sinodes table blocks */
+
+    }else if( options.flags & (OPT_I)){ 
+       /* we have a fixed number of slots passed in, so calculate how 
+        * many blocks are required and how big the file/device should 
+        * be. */
+        rem = (( bc->in_sinodes_num % sinodes_per_block) == 0) ? 0 : 1; 
+        sinodes_blocks = ( bc->in_sinodes_num / sinodes_per_block) + rem;
+        rem = (( sinodes_blocks % bits_per_block) == 0) ? 0 : 1; 
+        sinodes_map_blocks = ( sinodes_blocks / bits_per_block) + rem;
+        bc->out_sinodes_bitmap_blocks_num = sinodes_map_blocks;
+        bc->out_sinodes_table_in_blocks = sinodes_blocks;
+        total_blocks_required += sinodes_map_blocks + sinodes_blocks;
+        bc->out_sinodes_num = sinodes_blocks * sinodes_per_block;
+    }else if( options.flags & (OPT_S)){ 
+        rem = (( bc->in_slots_num % slots_per_block) == 0) ? 0 : 1;
+        slots_blocks = ( bc->in_slots_num / slots_per_block) + rem;
+        /* how many blocks our slots map need */
+        rem = ( ( slots_blocks % bits_per_block) == 0) ? 0 : 1;
+        slots_map_blocks = ( slots_blocks / bits_per_block) + rem;
+        bc->out_slots_bitmap_blocks_num = slots_map_blocks;
+        bc->out_slots_table_in_blocks = slots_blocks;
+        total_blocks_required += slots_map_blocks + slots_blocks;
+        bc->out_slots_num = slots_blocks * slots_per_block;
+    }
+
+    if( options.flags & (OPT_I|OPT_S)){
         /* calculate total device size */
         n = total_blocks_required;
         bc->in_file_size_in_blocks = (uint64_t) ((float) n * 
                                         ( 100.0 / (float) bc->in_percentage));
 
         bc->in_file_size_in_mbytes = bc->in_file_size_in_blocks / 128;
-   }
-
-
+    }
 
     /* now fill in the bitmap size in blocks and finish calculations */
     rem = ( (bc->in_file_size_in_blocks % bits_per_block) == 0 )? 0 : 1; 
@@ -839,8 +865,8 @@ int parse_opts( int argc, char **argv){
         flags |= CMD_KFS;
     }else if( strncmp( command, "meta", 4) == 0){
         flags |= CMD_META;
-    }else if( strncmp( command, "ost", 3) == 0){
-        flags |= CMD_OST;
+    }else if( strncmp( command, "sis", 3) == 0){
+        flags |= CMD_SIS;
     }else if( strncmp( command, "graph", 5) == 0){
         flags |= CMD_GRAPH;
     }else{
@@ -854,7 +880,7 @@ int parse_opts( int argc, char **argv){
     /* parse option */
     passed_opts = argv;
     passed_opts++;
-    while ((opt = getopt(argc, passed_opts, opc )) != -1) {
+    while ((opt = getopt(argc-1, passed_opts, opc )) != -1) {
         TRACE("OK071, opt='%c', optarg='%s'", opt, optarg);
         switch (opt) {
             case 'f':
@@ -921,8 +947,8 @@ int parse_opts( int argc, char **argv){
             help = (char **) &help_mkfs_kfs;
         }else if( flags & CMD_META){
             help = (char **) &help_mkfs_meta;
-        }else if( flags & CMD_OST){
-            help = (char **) &help_mkfs_ost;
+        }else if( flags & CMD_SIS){
+            help = (char **) &help_mkfs_sis;
         }else if( flags & CMD_GRAPH){
             help = (char **) &help_mkfs_graph;
         }else{
@@ -947,8 +973,8 @@ int parse_opts( int argc, char **argv){
     TRACE("ok2");
     if( need_file == 1){
         /* last argument missing, error .*/
-        if( ( flags & OPT_F) != 0){
-            TRACE_ERR("Argument -f not specified");
+        if(( flags & OPT_F) == 0){
+            TRACE_ERR("Argument -f was not specified");
             display_help( help);
             exit(EXIT_FAILURE);
         }
@@ -969,14 +995,14 @@ int parse_opts( int argc, char **argv){
          /* CMD_GRAPH and -i are incompatible */
          ( (flags & (CMD_GRAPH|OPT_I)) == (CMD_GRAPH|OPT_I)) ||
 
-         /* CMD_OST and -s are incompatible */
-         ( (flags & (CMD_OST|OPT_S)) == (CMD_OST|OPT_S)) ||
+         /* CMD_SIS and -s are incompatible */
+         ( (flags & (CMD_SIS|OPT_S)) == (CMD_SIS|OPT_S)) ||
 
          /* CMD_GRAPH and -s are incompatible */
          ( (flags & (CMD_GRAPH|OPT_S)) == (CMD_GRAPH|OPT_S)) ||
 
-         /* CMD_META, CMD_OST and CMD_GRAPH, with -k, always */
-         ( (flags & ( CMD_META|CMD_GRAPH|CMD_OST)) && 
+         /* CMD_META, CMD_SIS and CMD_GRAPH, with -k, always */
+         ( (flags & ( CMD_META|CMD_GRAPH|CMD_SIS)) && 
             ((flags & OPT_K) == 0)) 
           
         ){
@@ -987,9 +1013,6 @@ int parse_opts( int argc, char **argv){
 
 
     TRACE("ok3");
-    if( need_file != 0){
-        strcpy( options.file_name, argv[optind]);
-    }
 
     options.flags = flags;
 
@@ -1045,8 +1068,8 @@ int parse_opts( int argc, char **argv){
         if( rc != 0){
             if( (options.flags & OPT_X_ITEMS) == 0 ){
                 if( options.flags & OPT_V){
-                    TRACE_ERR( "File '%s' does not exist, will create. \n", 
-                               options.file_name);
+                    TRACE_DBG( "File '%s' does not exist, will create.", 
+                                options.file_name);
                 }
                 options.flags |= MKFS_CREATE_FILE;
                 options.flags |= MKFS_IS_REGULAR_FILE;
@@ -1071,6 +1094,13 @@ int parse_opts( int argc, char **argv){
    
             options.flags |= OPT_S;
         }
+    }
+
+    if( ( options.flags & MKFS_CREATE_FILE) && 
+        ( (options.flags & OPT_D) == 0)){
+        TRACE_ERR( "We need to create a file but argument -d is missing.");
+        display_help( help);
+        return( -1);
     }
 
 
@@ -1103,7 +1133,7 @@ int main( int argc, char **argv){
     }
 
     /* compute blocks and values */
-    rc = compute_blocks();
+    rc = compute_values();
     if( rc < 0){
         return( rc);
     }

@@ -136,14 +136,11 @@
  * data structures on storage. */
 typedef struct{
     uint32_t kfs_magic;  /* always should be KFS_MAGIC */
-#define KFS_HAVE_META                              0x01 /* slots */
-#define KFS_HAVE_OBJ                               0x02 /* super inodes */
-#define KFS_HAVE_GRAPH                             0x04 /* graph */
-#define KFS_HAVE_SB                                0x08 /* super block */
-
-#define KFS_HAVE_ALL           (KFS_HAVE_META|KFS_HAVE_OBJ|KFS_HAVE_GRAPH|\
-                                KFS_HAVE_SB)
-
+#define KFS_FULL                                   0x01
+#define KFS_META                                   0x02
+#define KFS_SIS                                    0x04
+#define KFS_GRAPH                                  0x08
+   
     uint32_t kfs_stg_magic;   /* set the main purpose of the file. 
                                  If the file has metadata, super inodes
                                  and the file system graph, KFS_GRAPH 

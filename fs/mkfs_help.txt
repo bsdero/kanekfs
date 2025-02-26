@@ -12,7 +12,7 @@ General options:
 Commands:
     kfs               Create a KFS file system in files/devices
     meta              Create KFS metadata
-    ost               Create KFS object Storage
+    sis               Create KFS super inodes storage
     graph             Create KFS graph data structure
 
 $p help_mkfs_kfs
@@ -74,12 +74,12 @@ Options for create KFS metadata:
         -Options -f, -k are mandatory
 
         -A not complete KFS superblock will be created in the
-         metadata file, if a KFS object storage or KFS file system
-         based on this metadata are later required. On that
+         metadata file, if a KFS super inodes storage or KFS file
+         system based on this metadata are later required. On that
          situation, the passed key will also be required.
 
         -The -k key is required, as it will be needed later on, when
-         KFS object storage and KFS graph are created.
+         KFS super inodes storage and KFS graph are created.
 
         -If -x option is specified, the items are metadata slots.
          items:
@@ -98,14 +98,15 @@ Options for create KFS metadata:
         -The -p argument specified which percentage of the file will
          be used for metadata slots.
 
-$p help_mkfs_ost
-Options for create KFS Object Storage:
-    -f os_file        Make just a KFS object storage structure in the
+$p help_mkfs_sis
+Options for create KFS SuperInodes Storage:
+    -f os_file        Make just a KFS SIS data structure in the
                         specified file. If it does not exist, a -d
                         option is required immediately after this
                         option.
     -d file_size      Create a file with size file_size
-    -m metadata_file  Use this metadata for create the object storage
+    -m metadata_file  Use this metadata for create the SIS data
+                      structure
     -i inodes_num     Make inodes_num inodes
     -p percentage     Use percentage of file space for inodes
     -k key            Use key for link with the superblock in the
@@ -121,7 +122,7 @@ Options for create KFS Object Storage:
          superblock in the metadata file will be updated.
 
         -The -k key is required, as it is required for link the
-         object storage with an existing KFS metadata file
+         SIS with an existing KFS metadata file
 
         -If -x option is specified, the items used are super inodes.
          items:
@@ -143,13 +144,13 @@ Options for create KFS Object Storage:
 $p help_mkfs_graph
 Options for create KFS filesystem graph
     -f graph_file     Make the graph data structure for an existing
-                      object storage structure, already descripted in
+                      SIS data structure, already descripted in
                       the superblock stored in the specified metadata
                       file.
                       If the file does not exist, a -d option is
                       required immediately after this option.
     -d file_size      Create a file with size file_size
-    -m metadata_file  Use this metadata for create the object storage
+    -m metadata_file  Use this metadata for create the SIS storage
     -k key            Use key for link with the superblock in the
                       metadata file
     -w conf_file      Write conf_file for file system configuration
@@ -165,8 +166,8 @@ Options for create KFS filesystem graph
          updated.
 
         -The -k key is required, as it is required for link the KFS
-         graph with a existing object storage file and KFS metadata
-         file.
+         graph with a existing SIS data structure file and KFS
+         metadata file.
 
         -The optional conf_file will be written for posterior mounts
          or post processing. If not specified, a default kfsd.conf
@@ -183,7 +184,7 @@ $p help_mkfs_gennotes
        files or devices. The on-file data structures
        it can build are:
         -KFS metadata ( key/values)
-        -KFS object storage (super inodes)
+        -KFS super inodes storage (super inodes)
         -KFS graph data structure.
 
        KFS data structures created separately should have the
@@ -191,9 +192,6 @@ $p help_mkfs_gennotes
        Graph filesystem. When this happens a kfsd.conf file is
        created and the KFS superblock is stored in the KFS
        metadata file.
-
-       The KFS metadata and KFS super inodes files are enough to
-       launch have an Object Storage service.
 
 
     Options works with the next conditions:
@@ -227,8 +225,7 @@ $p help_mkfs_gennotes
              both super inodes and metadata slots are used
             -If we are creating KFS metadata, only metadata slots are
             used
-            -If we are creating KFS object storage, only super inodes
-            are used.
+            -If we are creating KFS SIS, only super inodes are used.
 
        blocks: arguments -s and/or -i may be mandatory in this
             mode. The calculations shows the number of blocks and

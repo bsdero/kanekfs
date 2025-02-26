@@ -69,12 +69,13 @@ pgcache_element_t *pgcache_element_map( pgcache_t *pgcache,
             }else{ /* same address, but requires more blocks. So we will
                       lock, flush, realloc, re-read and unlock. */
                 pthread_mutex_lock( &cel->ce_mutex); /* lock element */
-                if( (flags & CACHE_EL_DIRTY) != 0){
-                    pg_cache_on_flush( cel); /* flush if needed */
+                if( (cel->ce_flags & CACHE_EL_DIRTY) != 0){
+                    pgcache_on_flush( cel); /* flush if needed */
                 }
 
                 /* realloc */ 
-                el->pe_mem_ptr = realloc( numblocks * KFS_BLOCKSIZE);
+                el->pe_mem_ptr = realloc( el->pe_mem_ptr, 
+                                          numblocks * KFS_BLOCKSIZE);
 
                 if( el->pe_mem_ptr == NULL){
                     TRACE_ERR("malloc error");
@@ -144,7 +145,7 @@ exit0:
 pgcache_element_t *pgcache_element_map_zero( pgcache_t *pgcache, 
                                              uint64_t addr, 
                                              int numblocks){
-    int i, rc;
+    int i;
     pgcache_element_t *el;
     cache_element_t *cel;
     cache_t *cache = (cache_t *) pgcache;
@@ -165,7 +166,7 @@ pgcache_element_t *pgcache_element_map_zero( pgcache_t *pgcache,
                                   * blocks into an existing cache element
                                   */
             CACHE_EL_ADD_COUNT( cel);
-            TRACE("page cached already, addr=0x%x,%lu", addr, addr);
+            TRACE("page cached already, addr=0x%lx,%lu", addr, addr);
             el = NULL;
             goto exit0;
             break;

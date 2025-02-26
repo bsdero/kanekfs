@@ -131,7 +131,6 @@ int kfs_verify( char *filename, int verbose, int extra_verification){
     if( verbose){
         printf("File Size: %lu MBytes\n", size / _1M);
         printf("KFS Magic: 0x%lx\n", sb->sb_magic);
-        printf("KFS Version: %u\n", sb->sb_version);
         printf("KFS Flags: 0x%x\n", sb->sb_flags);
         printf("KFS Blocksize: %lu\n", sb->sb_blocksize);
         printf("KFS root super inode: %lu\n", sb->sb_root_super_inode);

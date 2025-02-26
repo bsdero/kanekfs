@@ -35,17 +35,17 @@ runtests: all
 testclean:
 	rm -rf 
 
-$(LIBKFS): krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o cache.o \
-	      kfs_io.o page_cache.o kfs_super.o 
-	$(AR) -r $(LIBKFS) kfs_info.o krand64.o dict.o hash.o dumphex.o gc.o \
+$(LIBKFS): krand64.o dict.o hash.o dumphex.o gc.o map.o kfs_io.o \
+	      page_cache.o kfs_super.o cache.o
+	$(AR) -r $(LIBKFS) krand64.o dict.o hash.o dumphex.o gc.o \
 		     map.o kfs_io.o page_cache.o kfs_super.o cache.o
 
 kfs_info: kfs_info.o $(LIBKFS)
 	$(CC) -o kfs_info kfs_info.o $(LDFLAGS)
 
 
-kfs_mkfs: kfs_mkfs.o $(LIBKFS)
-	$(CC) -o kfs_mkfs kfs_mkfs.o $(LDFLAGS)
+kfs_mkfs: kfs_mkfs.o mkfs_help.o eio.o $(LIBKFS)
+	$(CC) -o kfs_mkfs kfs_mkfs.o mkfs_help.o eio.o $(LDFLAGS)
 
 
 kfs_server: kfs_server.o $(LIBKFS)
@@ -91,6 +91,14 @@ test_page_cache: test_page_cache.o dumphex.o page_cache.o utils.o eio.o \
 	cache.o
 	$(CC) -o test_page_cache test_page_cache.o dumphex.o eio.o page_cache.o \
 		cache.o -lpthread
+
+mkfs_help.o:
+	$(CC) -c mkfs_help.c
+
+
+mkfs_help.c: help_build
+	./help_build mkfs_help.txt mkfs_help.c
+
 
 clean:
 	@UNAME=`uname|egrep -i "cygwin|windows"`; \

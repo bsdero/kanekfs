@@ -152,7 +152,6 @@ typedef table_t si_table_t;
 typedef table_t blockmap_t;
 
 typedef struct{
-    kfs_file_header_t sb_file_header;
     uint64_t sb_magic;    /* set this if super block is active */
     uint64_t sb_root_super_inode; /* any inode can be the root inode */
 

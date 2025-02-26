@@ -81,17 +81,18 @@ options_t options;
 blocks_calc_t blocks_calc;
 
 #define PRINTV(fmt,...)          {                                          \
-                                     if( options.flags & OPT_VERBOSE){      \
+                                     if( options.flags & OPT_V){            \
                                         fprintf( stdout,                    \
                                                  fmt"\n", ##__VA_ARGS__);   \
                                      }                                      \
                                  } 
 
 
-extern help_mkfs, help_mkfs_kfs, help_mkfs_meta, help_mkfs_ost;
-extern help_mkfs_graph, help_mkfs_gennotes;
+extern char **help_mkfs, **help_mkfs_kfs, **help_mkfs_meta;
+extern char **help_mkfs_ost, **help_mkfs_graph, **help_mkfs_gennotes;
 
-int display_help( char **s){
+int display_help( char **help){
+    char **s = help;
     while( *s){
         printf( "%s\n", *s++);
     }
@@ -180,7 +181,6 @@ int build_superblock( int fd){
     sb->sb_file_header.kfs_magic = KFS_MAGIC;
     
     sb->sb_magic = KFS_MAGIC;
-    sb->sb_version = 0x000001;
     sb->sb_flags = 0x0000;
     sb->sb_blocksize = KFS_BLOCKSIZE;
     sb->sb_root_super_inode = 0;
@@ -570,16 +570,16 @@ int build_filesystem_in_file(){
     
     PRINTV("-Creating file");
     if( options.flags & MKFS_CREATE_FILE){
-        rc = create_file( options.filename);
+        rc = create_file( options.file_name);
         if( rc != 0){
             return( rc);
         }
     }
 
     PRINTV("-Writing file");
-    fd = open( options.filename, O_RDWR );
+    fd = open( options.file_name, O_RDWR );
     if( fd < 0){
-        TRACE_ERR( "ERROR: Could not open file '%s'\n", options.filename);
+        TRACE_ERR( "Could not open file '%s'\n", options.file_name);
         return( -1);
     }
 
@@ -679,7 +679,7 @@ int compute_blocks(){
     float factor = 1.0; /* divisor for both slots and super inodes */
 
     /* if we have metadata slots, super inodes and all in a single file*/
-    if( options.flags & OPT_SINGLE){
+    if( options.flags & (OPT_I|OPT_S)){
         factor = 2.0;
     }
 
@@ -690,7 +690,7 @@ int compute_blocks(){
     bc->in_file_size_in_blocks = options.size / KFS_BLOCKSIZE;
     bc->in_file_size_in_mbytes = options.size / _1M;
  
-    if( options.flags & (OPT_NUM_SINODES|OPT_NUM_SLOTS)){
+    if( options.flags & (OPT_I|OPT_S)){
         
         bc->in_sinodes_num = options.sinodes_num; 
         bc->in_slots_num = options.slots_num;
@@ -715,7 +715,7 @@ int compute_blocks(){
 
 
     /* add super block */
-    if( options.flags & OPT_GRAPH){
+    if( options.flags & (CMD_META) ){
         total_blocks_required++;
     }
 
@@ -729,9 +729,9 @@ int compute_blocks(){
         sinodes_blocks = slots_blocks;  /* same for sinodes table blocks */
 
         /* sum the total blocks required now */
-        if( options.flags & OPT_META){
+        if( options.flags & CMD_META){
             total_blocks_required += slots_blocks;
-        }else if( options.flags & OPT_OBJ){
+        }else if( options.flags & CMD_OST){
             total_blocks_required += sinodes_blocks;
         }
 
@@ -812,12 +812,14 @@ int compute_blocks(){
 
 /* parse the passed options */
 int parse_opts( int argc, char **argv){
-    int opt, flags, mask; 
+    int opt, flags; 
     struct stat st;
     int rc;
     int need_file = 1;
-    char **options;
+    options_t options;
+    char **help = ( char **) &help_mkfs;
     char *command;
+    char **passed_opts;
 
     flags = 0;
     char opc[] = "f:d:i:s:p:k:w:m:xvh";
@@ -825,11 +827,13 @@ int parse_opts( int argc, char **argv){
 
     if( argc <= 1){
         TRACE_ERR( "invalid number of arguments.");
-        display_help( help_mkfs);
+        display_help( help);
         exit( EXIT_FAILURE);
     }      
 
+    TRACE("OK05");
     
+    /* detect command */
     command = argv[1];
     if( strncmp(command, "kfs", 3) == 0){
         flags |= CMD_KFS;
@@ -841,14 +845,17 @@ int parse_opts( int argc, char **argv){
         flags |= CMD_GRAPH;
     }else{
         TRACE_ERR( "Invalid command '%s'", command);
-        display_help( help_mkfs);
+        display_help( help);
         exit( EXIT_FAILURE);
     }
 
+    TRACE("OK07");
 
-    options = argv;
-    options++;
-    while ((opt = getopt(argc, argv, opc )) != -1) {
+    /* parse option */
+    passed_opts = argv;
+    passed_opts++;
+    while ((opt = getopt(argc, passed_opts, opc )) != -1) {
+        TRACE("OK071, opt='%c', optarg='%s'", opt, optarg);
         switch (opt) {
             case 'f':
                 flags |= OPT_F;
@@ -907,103 +914,107 @@ int parse_opts( int argc, char **argv){
         }
     }
 
+    TRACE("OK09");
+
+    /* which help to use depending on the command used */
+    if( flags & CMD_KFS){
+            help = (char **) &help_mkfs_kfs;
+        }else if( flags & CMD_META){
+            help = (char **) &help_mkfs_meta;
+        }else if( flags & CMD_OST){
+            help = (char **) &help_mkfs_ost;
+        }else if( flags & CMD_GRAPH){
+            help = (char **) &help_mkfs_graph;
+        }else{
+            help = (char **) &help_mkfs;
+        }
+
+
+    TRACE("ok1");
     /* if help required, display help and exit, no errors */
     if( flags & OPT_H){
-        if( flags & CMD_KFS){
-            display_help( help_mkfs_kfs );
-        }else if( flags & CMD_META){
-
-            display_help( help_mkfs_kfs );
-        }
+        display_help( help );
         exit( 0);
     }
 
     /* determine if the final file name is required. If we are just
      * doing computations, this is not needed. */
-    if( ( flags & (OPT_CALCULATE|OPT_NUM_SINODES|OPT_NUM_SLOTS)) ==
-                  (OPT_CALCULATE|OPT_NUM_SINODES|OPT_NUM_SLOTS)){
+    if( ( flags & (OPT_X_BLOCKS|OPT_X_ITEMS)) != 0){
         need_file = 0;
     }
 
 
+    TRACE("ok2");
     if( need_file == 1){
         /* last argument missing, error .*/
-        if (optind >= argc) {
-            fprintf(stderr, "Expected argument after options\n");
-            display_help();
+        if( ( flags & OPT_F) != 0){
+            TRACE_ERR("Argument -f not specified");
+            display_help( help);
             exit(EXIT_FAILURE);
         }
     }
 
     /* cases for invalid options combination */
-    if(  ( flags & OPT_HELP) || /* any option with -h */
-         ( flags == OPT_VERBOSE) ||   /* -v alone */
+    if(  ( flags & OPT_H) || /* any option with -h */
+         ( (flags & OPT_V) == flags) ||   /* -v alone */
 
-         /* -p and -i, or -p and -n can not go together */
-         ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SINODES)) == 
-                    ( OPT_PERCENTAGE | OPT_NUM_SINODES)) ||
-         ( (flags & ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ==
-                    ( OPT_PERCENTAGE | OPT_NUM_SLOTS)) ||
 
-         /* -g can not go with -i or -s */
-         ( (flags & ( OPT_GRAPH | OPT_NUM_SLOTS)) ==
-                    ( OPT_GRAPH | OPT_NUM_SLOTS)) ||
-         ( (flags & ( OPT_GRAPH | OPT_NUM_SINODES)) ==
-                    ( OPT_GRAPH | OPT_NUM_SINODES)) ||
+         /* -p and -i, or -p and -s can not go together */
+         ( (flags & (OPT_P|OPT_S)) == (OPT_P|OPT_S)) ||
+         ( (flags & (OPT_P|OPT_I)) == (OPT_P|OPT_I)) ||
 
-         /* -o can not go with -s */
-         ( (flags & ( OPT_OBJ | OPT_NUM_SLOTS)) ==
-                    ( OPT_OBJ | OPT_NUM_SLOTS)) ||
+         /* CMD_META and -i are incompatible */
+         ( (flags & (CMD_META|OPT_I)) == (CMD_META|OPT_I)) ||
 
-         /* -m can not go with -i */
-         ( (flags & ( OPT_META | OPT_NUM_SINODES)) ==
-                    ( OPT_META | OPT_NUM_SINODES)) ||
+         /* CMD_GRAPH and -i are incompatible */
+         ( (flags & (CMD_GRAPH|OPT_I)) == (CMD_GRAPH|OPT_I)) ||
 
-         /* -m, -o or -g should go with -k, always */
-         ( (flags & ( OPT_META | OPT_GRAPH | OPT_OBJ) != 0) && 
-            (flags & OPT_KEY == 0)) 
+         /* CMD_OST and -s are incompatible */
+         ( (flags & (CMD_OST|OPT_S)) == (CMD_OST|OPT_S)) ||
+
+         /* CMD_GRAPH and -s are incompatible */
+         ( (flags & (CMD_GRAPH|OPT_S)) == (CMD_GRAPH|OPT_S)) ||
+
+         /* CMD_META, CMD_OST and CMD_GRAPH, with -k, always */
+         ( (flags & ( CMD_META|CMD_GRAPH|CMD_OST)) && 
+            ((flags & OPT_K) == 0)) 
+          
         ){
-        fprintf( stderr, "Invalid options combination.\n");
-        display_help();
+        TRACE_ERR( "Invalid options combination.\n");
+        display_help( help);
         exit( EXIT_FAILURE);
     }
 
 
-    if( ( flags & ( OPT_META | OPT_OBJ | OPT_GRAPH)) == 0){
-        flags |= (OPT_META | OPT_OBJ | OPT_GRAPH | OPT_SINGLE); /* a file system in a single file */
-    }
-
+    TRACE("ok3");
     if( need_file != 0){
-        strcpy( options.filename, argv[optind]);
+        strcpy( options.file_name, argv[optind]);
     }
 
     options.flags = flags;
 
     /* validate the specified options */
-    if( options.flags & OPT_SIZE){
+    if( options.flags & OPT_D){
         options.size = validate_size( options.str_size);
         if( options.size == 0){
-            fprintf( stderr, "ERROR: Size not valid\n");
-            display_help();
+            TRACE_ERR( "Size not valid");
+            display_help( help);
             return( -1);
         }
 #define MIN_FS                           10485760 /* 10 Mb */
 /*define MIN_FS                          20971520 */
         
         if( options.size < MIN_FS){
-            fprintf( stderr, 
-                     "ERROR: Invalid size, minimum is %d MBytes\n",
-                     MIN_FS / _1M);
+            TRACE_ERR( "Invalid size, minimum is %d MBytes", MIN_FS / _1M);
             return( -1);
         }
     }
 
-   if( options.flags & OPT_PERCENTAGE){
+   TRACE("OK4");
+   if( options.flags & OPT_P){
         options.percentage = validate_num( options.str_percentage);
         if( options.percentage < 2 || options.percentage > 90 ){
-            fprintf( stderr, "ERROR: Percentage not valid. Valid range is ");
-            fprintf( stderr, "[2-90]\n");
-            display_help();
+            TRACE_ERR( "Percentage not valid. Valid range is [2-90]");
             return( -1);
         }
     }else{
@@ -1012,39 +1023,37 @@ int parse_opts( int argc, char **argv){
 
 
 
-    if( options.flags & OPT_NUM_SINODES){
+    if( options.flags & OPT_I){
         options.sinodes_num = validate_num( options.str_sinodes_num);
         if( options.sinodes_num == 0){
-            fprintf( stderr, "ERROR: SInodes num not valid\n");
-            display_help();
+            TRACE_ERR( "SInodes num not valid");
             return( -1);
         }
     }
-    if( options.flags & OPT_NUM_SLOTS){
+    if( options.flags & OPT_S){
         options.slots_num = validate_num( options.str_slots_num);
         if( options.slots_num == 0){
-            fprintf( stderr, "ERROR: Slots num not valid\n");
-            display_help();
+            TRACE_ERR( "Slots num not valid");
             return( -1);
         }
     }
 
 
+    TRACE("OK5");
     if( need_file == 1){
-        rc = stat( options.filename, &st);
+        rc = stat( options.file_name, &st);
         if( rc != 0){
-            if( (options.flags & OPT_CALCULATE) == 0 ){
-                if( options.flags & OPT_VERBOSE){
-                    printf( "File '%s' does not exist, will create. \n", 
-                            options.filename);
+            if( (options.flags & OPT_X_ITEMS) == 0 ){
+                if( options.flags & OPT_V){
+                    TRACE_ERR( "File '%s' does not exist, will create. \n", 
+                               options.file_name);
                 }
                 options.flags |= MKFS_CREATE_FILE;
                 options.flags |= MKFS_IS_REGULAR_FILE;
             }
         }else{
             if( (! S_ISREG(st.st_mode)) && (! S_ISBLK(st.st_mode))){
-                fprintf( stderr, "ERROR: File is not a regular file nor a ");
-                fprintf( stderr, "block device. Exit. ");
+                TRACE_ERR( "File is not a regular file nor a block device");
                 return( -1);
             }  
 
@@ -1056,19 +1065,19 @@ int parse_opts( int argc, char **argv){
             }
 
             if( S_ISBLK(st.st_mode)){
-                options.size = (uint64_t) get_bd_size( options.filename);
+                options.size = (uint64_t) get_bd_size( options.file_name);
                 options.flags |= MKFS_IS_BLOCKDEVICE;
             }
    
-            options.flags |= OPT_SIZE;
+            options.flags |= OPT_S;
         }
     }
 
 
 
-    if( options.flags & (OPT_VERBOSE|OPT_CALCULATE)){
+    if( options.flags & (OPT_V|OPT_X_ITEMS|OPT_X_BLOCKS)){
         printf("Passed arguments: \n");
-        printf("    Filename=<%s>\n", options.filename);
+        printf("    Filename=<%s>\n", options.file_name);
         printf("    SSize=<%s>\n", options.str_size);
         printf("    SSInodesNum=<%s>\n", options.str_sinodes_num);
         printf("    SSlotsNum=<%s>\n", options.str_slots_num);
@@ -1080,6 +1089,7 @@ int parse_opts( int argc, char **argv){
         printf("    Flags=<0x%x>\n", options.flags);
     }
 
+    exit(0);
     return(0);
 }
 
@@ -1099,17 +1109,16 @@ int main( int argc, char **argv){
     }
 
 
-    if( options.flags & (OPT_VERBOSE|OPT_CALCULATE) ){
-        blocks_results_display();
-    }
-
-    if( options.flags & OPT_CALCULATE){
-       exit( 0);
+    if( options.flags & (OPT_X_BLOCKS|OPT_X_ITEMS) ){
+        if( options.flags & OPT_V){
+            blocks_results_display();
+        }
+        exit( 0);
     }
 
     rc = build_filesystem_in_file(); 
     if( rc != 0){
-        fprintf( stderr, "ERROR: Failed to build a filesystem\n");
+        TRACE_ERR( "Failed to build a filesystem");
     }else{
         printf("\nDone.\n");
     }

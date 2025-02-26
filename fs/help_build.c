@@ -9,7 +9,7 @@ int main( int argc, char **argv){
     char *filename, *outfname;
     char buf[1024], f_name[80];
     char *fp_name;
-    char *p;
+    unsigned char *p;
     int have_sep=0, have_text=0, n;
 
     if( argc < 2 || argc > 3){
@@ -39,7 +39,7 @@ int main( int argc, char **argv){
             buf[n-1] = 0;
         }
 
-        p = buf;
+        p = ( unsigned char *) buf;
         have_sep = 0; 
         while( *p != 0){
             if( *p == '$' ){
@@ -57,7 +57,7 @@ int main( int argc, char **argv){
 
             have_text = 1;
 
-            p = buf;
+            p = ( unsigned char *) buf;
             fp_name = f_name;
 
             while( !isspace( *p++));
@@ -65,10 +65,6 @@ int main( int argc, char **argv){
                 *fp_name++ = *p++;
             }
             *fp_name = 0;
-            if( f_name == NULL){
-                fprintf( stderr, "Should not happen, abort");
-                return(1);
-            }
 
             fprintf( f_out, "char *%s[]={\n", f_name);
             continue;

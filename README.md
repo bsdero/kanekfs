@@ -189,7 +189,7 @@ metadata.
 
 All the features may be used for the next capabilities:
 1. one single global filesystem with different root inodes, kernel and 
-binaries, as desired. Useful for clusters, networking, containers, vms.
+binaries, as desired. Useful for clusters, networking, containers, virtual machines.
 2. software and data formats composed of many files, like 3d rendering 
 software, package managers, AI models, video games.
 3. Better organization of files for professional working with different 
@@ -205,7 +205,6 @@ Is a bit complicated to cover every aspect of the graph file system in general f
 like mkfs, fsck and so on. So, the file system software will be divided in modules, which would be in charge of
 specific functionalities and features of the file system.
 
-For practicity, an object storage service is on plan, and there will be a metadata service for handle the metadata required by the super block, inodes or edges.
 
 So some of the planned modules and tools:
 

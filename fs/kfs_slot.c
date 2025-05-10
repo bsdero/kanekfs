@@ -2,9 +2,6 @@
 #include "eio.h"
 #include "page_cache.h"
 
-
-
-
 #include "slots.h"
 
 int kfs_slot_reserve( uint64_t *slot_id ){

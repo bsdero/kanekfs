@@ -31,7 +31,8 @@ I think the operating systems and storage technologies should continue
 evolving, explore new approaches and expanding the capabilities.
 
 For this project I am trying to explore a Graph file system design, and this 
-is the repo of this experimental approach. In this project we will address this, from a file system running in the user space.
+is the repo of this experimental approach. In this project we will address 
+this, from a file system running in the user space.
 
 
 ___
@@ -182,14 +183,16 @@ preserved, except:
 
 #### With this design we may:
 
-1. we have a graph. So any node may be the root node, and we can still have access to the whole file system. No exceptions.
+1. we have a graph. So any node may be the root node, and we can still have 
+access to the whole file system. No exceptions.
 2. relations may be stablished between nodes, and the relations may have 
 metadata.
 3. also the super block may have its own dictionary/metadata.
 
 All the features may be used for the next capabilities:
 1. one single global filesystem with different root inodes, kernel and 
-binaries, as desired. Useful for clusters, networking, containers, virtual machines.
+binaries, as desired. Useful for clusters, networking, containers, virtual 
+machines.
 2. software and data formats composed of many files, like 3d rendering 
 software, package managers, AI models, video games.
 3. Better organization of files for professional working with different 
@@ -200,13 +203,133 @@ all the standard posix operations easily.
 the hierarchical file system is possible.
 
 
-#### Software Design
-Is a bit complicated to cover every aspect of the graph file system in general file system tools, 
-like mkfs, fsck and so on. So, the file system software will be divided in modules, which would be in charge of
-specific functionalities and features of the file system.
+#### GOFS Software Design
+
+1   Graph Organized File System (GOFS) Design
+
+Based on the general architecture, we will discuss about the software design 
+for a Graph Organized File System. I will put an emphasis in functionality and
+robustness. 
+
+Is a bit complicated to cover every aspect of the graph file system in general
+file system tools, like mkfs, fsck and so on. So, the file system software 
+will be divided in modules, which would be in charge of specific 
+functionalities and features of the file system.
 
 
-So some of the planned modules and tools:
+So some of the planned modules:
+1.-Foundation libraries (FL)
+   This libraries includes a cache framework, bitmap tools, hashing tools, 
+   IO tools and lot of low level foundation functions. 
+
+2.-Extents Caching Library (ECL). 
+   This will be the basis of the GOFS. We need to have a library and 
+   also will be providing storage organization in extents and extents 
+   caching. This is the most low level common functionality. 
+
+3.-Metadata service (MetaServ). 
+   This service will provide metadata storage and caching. 
+
+4.-Object Storage Service (OStor)
+   This service will provide Object Storage management and data caching. 
+
+5.-Graph FS service (GraphServ)
+   This service will handle the graph data structure for the file system. 
+
+6.-Object Storage tools and utilities ( OSTutils)
+   Binaries support for Object Storage mode 
+
+7.-Graph FS shell and commands (GraphUtils)
+   This will be binaries supporting the file system graph data structure. 
+
+
+so basically the software will be interacting like this with the OS/Kernel.
+
++---------------------------------------+
+|            GraphUtils                 |
++-----------+---------------------------+
+|OSTutils   |    Graphservice           |
++-----------+------+                    |
+|        OStor     |                    |
++           +------+-----+              |
+|           |MetaService |              |
++-----------+------------+--------------+
+|                  ECL                  |
++---------------------------------------+
+
+2   Foundation Libraries (FL)
+    A lot of different libraries needs to be designed. 
+    -Tracing and logging macros and libraries.
+    -Hashing
+    -Memory management/Garbage collection
+    -Bit map management for blocks and extents.
+    -Fast 64bit random generator
+    -IO for block devices/files by blocks
+    -Configuration files parser
+    -Hexadecimal dumps
+    -Stack dump display for debugging
+    -Cache framework
+
+
+2.1 Cache Framework
+    A simple cache framework is needed to support all the other caches which 
+    would be added.
+
+    The simple cache framework design will provide generic flags for operation,
+    and a simple posix thread, which will be scanning all the elements in the 
+    cache, running many operations, depending to various flags. The cache
+    data structure consists on:
+    -One list of elements 
+    -One list of dirty elements. 
+    -Flags
+    -A thread ID
+    -A thread mutex
+    -Callbacks for the on_map(), on_evict(), on_flush().
+
+    Each element in the cache will have the next fields:
+    -64bit ID
+    -thread mutex
+    -flags
+    -access count
+    -a pointer to the parent cache data structure.
+
+    The framework will have the next operations:
+
+
+2   ECL Design
+    For the design of the Extents Caching Library, a Block size for the graph
+    file system will be 8 Kbytes. So this is the minimal block size. 
+
+    For this software component, a simple cache framework needs a design, as
+    the extents cache, slots cache, file cache, and graph cache will be needed.
+
+
+
+
+
+
+    CACHE_READY       Cache thread ready to run
+    CACHE_ACTIVE      Cache thread enabled, may run any time
+
+
+    2.1 Extents Cache
+    Extents are groups of contiguous disk blocks. So, in order to make faster
+    IO operations, an extents cache will be used. To make the cache usable, 
+    a device block address and a number of contiguous block should be used, 
+    so this is the extent representation. This is mapped to memory. 
+
+    It works in a similar way
+    to a page cache, but we are caching extents in memory. 
+
+    So ideally a thread would be in charge of this cache, flushing out extents
+    marked as "dirty" and keep in memory any "pinned" extent. Also operations
+    like "sync" should flush out all the cached extents in memory.
+
+
+
+    
+  
+
 
 - kfs_slotd: a metadata service with direct access to block storage
 - kfs_mkslots: a tool for build metadata slots in block storage

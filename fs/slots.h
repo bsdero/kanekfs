@@ -11,7 +11,7 @@ slot_t *slot_alloc( uint64_t inode,
                     uint16_t edge, 
                     uint16_t flags);
 
-int slot_peek( uint64_t slot_id, dict_d *dict); /* open, read, close a slot */
+int slot_peek( uint64_t slot_id, dict_t *dict); /* open, read, close a slot */
 
 int slot_peek_owner( uint64_t slot_id, 
                      uint64_t *inode,

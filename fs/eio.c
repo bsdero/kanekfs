@@ -12,17 +12,18 @@
 
 
 
-uint64_t get_bd_size( char *fname){
+int get_bd_size( char *fname, uint64_t *size){
+    *size = 0;
+
 #ifdef BLKGETSIZE64
-    uint64_t numbytes; 
     int fd = open( fname, O_RDONLY);
     if( fd < 0){
         TRACE_ERR("Could not open block device \n");
         return( -1);
     }
-    ioctl( fd, BLKGETSIZE64, &numbytes);
+    ioctl( fd, BLKGETSIZE64, size);
     close(fd);
-    return( numbytes);
+    return( 0);
 #else
     TRACE_ERR("Operation not supported\n");
     return( -1);
@@ -34,7 +35,7 @@ uint64_t get_bd_size( char *fname){
 int create_file( char *fname){
     int fd = creat( fname, 0644);
     if( fd < 0){
-        perror( "ERROR: Could not create file \n");
+        TRACE_ERRNO( "Could not create file '%s'", fname);
         return( -1);
     }
     close(fd);
@@ -42,18 +43,18 @@ int create_file( char *fname){
 }
 
 
-char *pages_alloc( int n){
-    char *page;
+char *extent_alloc( int n){
+    char *extent;
 
-    page = malloc( KFS_BLOCKSIZE * n);
-    if( page == NULL){
-        TRACE_SYSERR( "malloc error.\n");
+    extent = malloc( KFS_BLOCKSIZE * n);
+    if( extent == NULL){
+        TRACE_SYSERR( "malloc error");
         return( NULL);
     }
 
     /* Fill the whole file with zeroes */
-    memset( page, 0, (KFS_BLOCKSIZE * n) );
-    return( page);
+    memset( extent, 0, (KFS_BLOCKSIZE * n) );
+    return( extent);
 }
 
 int block_read( int fd, char *page, uint64_t addr){

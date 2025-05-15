@@ -466,7 +466,7 @@ This extents cache makes lot of use or EIO, the framework cache and
 the bitmap library. Also facilities for make an extent 
 
 
-#### 4       Metadata service
+### 4       Metadata service
 The metadata are key-value pairs. So the metadata service provides 
 metadata storage and caching. The metadata is organized in slots, and
 each slot is identified by an unsigned number, being the 0 exclusive
@@ -485,7 +485,8 @@ The metadata service makes use of the Extents cache and the Dictionary
 library descripted in 2.7. Also using the EIO capacity for make extent disk 
 format, to create metadata slots on disk storage. 
 
-
+### 5 Object Storage Service
+ 
 
 
 

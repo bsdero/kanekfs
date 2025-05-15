@@ -1,7 +1,7 @@
 # Kanek File System
 ___
 
-### A file system organized in a graph.
+## A file system organized in a graph.
 
 This project is about a file system organized in a cyclic/weighted graph, 
 rather than a hierarchical tree.
@@ -203,9 +203,9 @@ all the standard posix operations easily.
 the hierarchical file system is possible.
 
 
-#### GOFS Software Design
+## GOFS Software Design
 
-1       Graph Organized File System (GOFS) Design
+### 1       Graph Organized File System (GOFS) Design
 
 Based on the general architecture, we will discuss about the software design 
 for a Graph Organized File System. I will put an emphasis in functionality and
@@ -218,33 +218,29 @@ functionalities and features of the file system.
 
 
 So some of the planned modules:
-1.-Foundation libraries (FL)
+1. **Foundation libraries (FL)**
    This libraries includes a cache framework, bitmap tools, hashing tools, 
    IO tools and lot of low level foundation functions. 
-
-2.-Extents Caching Library (ECL). 
+2. **Extents Caching Library (ECL).** 
    This will be the basis of the GOFS. We need to have a library and 
    also will be providing storage organization in extents and extents 
    caching. 
-
-3.-Metadata service (MetaServ). 
+3. **Metadata service (MetaServ).**
    This service will provide metadata storage and caching. 
-
-4.-Object Storage Service (OStor)
+4. **Object Storage Service (OStor)**
    This service will provide Object Storage management and data caching. 
-
-5.-Graph FS service (GraphServ)
+5. **Graph FS service (GraphServ)**
    This service will handle the graph data structure for the file system. 
-
-6.-Object Storage tools and utilities ( OSTutils)
+6. **Object Storage tools and utilities ( OSTutils)**
    Binaries support for Object Storage mode 
-
-7.-Graph FS shell and commands (GraphUtils)
+7. **Graph FS shell and commands (GraphUtils)**
    This will be binaries supporting the file system graph data structure. 
 
 
-so basically the software will be interacting like this with the OS/Kernel.
+So, basically the software will be interacting like this with the OS/Kernel.
 
+
+```
 +---------------------------------------+
 |            GraphUtils                 |
 +-----------+---------------------------+
@@ -257,100 +253,99 @@ so basically the software will be interacting like this with the OS/Kernel.
 |                  ECL                  |
 +---------------------------------------+
 
-2       Foundation Libraries (FL)
-        A lot of different libraries needs to be designed. 
-        -Tracing and logging macros and libraries.
-        -Hashing
-        -Memory management/Garbage collection
-        -Bit map management for blocks and extents.
-        -Fast 64bit random generator
-        -IO for block devices/files by blocks and extents, also using bit maps
-        -Dictionary library
-        -Configuration files parser
-        -Hexadecimal dumps
-        -Stack dump display for debugging
-        -Cache framework
+```
+### 2       Foundation Libraries (FL)
+A lot of different libraries needs to be designed. 
+- Tracing and logging macros and libraries.
+- Hashing
+- Memory management/Garbage collection
+- Bit map management for blocks and extents.
+- Fast 64bit random generator
+- IO for block devices/files by blocks and extents, also using bit maps
+- Dictionary library
+- Configuration files parser
+- Hexadecimal dumps
+- Stack dump display for debugging
+- Cache framework
 
 
-2.1     Trace and Logging macros 
-        Trace facilities are just trace messages functionality, for debugging
-        and error analysis. Logging just registers in logs important, relevant 
-        notification messages. 
+#### 2.1     Trace and Logging macros 
+Trace facilities are just trace messages functionality, for debugging
+and error analysis. Logging just registers in logs important, relevant 
+notification messages. 
     
-2.2     Hashing for faster word searches and ordering. 
-        In order to make faster string searchs, a hash function which returns
-        an unsigned 64-bit integer has been implemented. The 64-bit value
-        matches string order, so the hash created by the word "cat" will be
-        always lesser than "dog", and both hashes will be lesser than "duck"
-        and "pig" respectively. 
+#### 2.2     Hashing for faster word searches and ordering. 
+In order to make faster string searchs, a hash function which returns
+an unsigned 64-bit integer has been implemented. The 64-bit value
+matches string order, so the hash created by the word "cat" will be
+always lesser than "dog", and both hashes will be lesser than "duck"
+and "pig" respectively. 
 
-2.3     Garbage Collecting
-        This library allows to keep track of garbage collecting, to avoid
-        memory leaks. Possibly it can use the cache framework facilities.
+#### 2.3     Garbage Collecting
+This library allows to keep track of garbage collecting, to avoid
+memory leaks. Possibly it can use the cache framework facilities.
 
-2.4     Bitmap management
-        Code exist already for mark bits and contiguous bit groups. This
-        functions are useful for bitmap management in block storage. 
+#### 2.4     Bitmap management
+Code exist already for mark bits and contiguous bit groups. This
+functions are useful for bitmap management in block storage. 
 
-2.5     Fast random 64bit unsigned integers generator
-        Code for this does exist already
+#### 2.5     Fast random 64bit unsigned integers generator
+Code for this does exist already
     
-2.6     EIO (IO library for read/write extents/blocks into block devices and 
-             files.)
-        An extent is a group of contiguous blocks, and it needs the starting
-        block address and the number of blocks. 
+#### 2.6     EIO (IO library for read/write extents/blocks into block devices and files.)
+An extent is a group of contiguous blocks, and it needs the starting
+block address and the number of blocks. 
 
-        By default the block size is 8KBytes, and 16KBytes length per block
-        is also selectable. 
+By default the block size is 8KBytes, and 16KBytes length per block
+is also selectable. This library also should allow to write:
+1. A bitmap for keep track of block and extents reserved and released, 
+automatically. The bitmap may be created in memory, or created in
+another block device. Also it can be omitted. 
+2. Reserved blocks or extents, which wont be touched by the library.
+3. Create an extent format in a file or block device, in a similar
+fashion to a filesystem. 
+4. Provide representation of extents and bitmaps data structures in 
+both memory and disk, for keep track of the information easily. 
 
-        This library also should allow to write:
-        1.-A bitmap for keep track of block and extents reserved and released, 
-           automatically. The bitmap may be created in memory, or created in
-           another block device. Also it can be omitted. 
-        2.-Reserved blocks or extents, which wont be touched by the library.
-        3.-Create an extent format in a file or block device, in a similar
-           fashion to a filesystem. 
-        4.-Provide representation of extents and bitmaps data structures in 
-           both memory and disk, for keep track of the information easily. 
+#### 2.7     Dictionary library.
+We need to add support to a new data structure based on key, values
+with the same functionality than python dictionaries and perl hashes.
+This will be named "dictionaries" and will handle strings as keys, 
+and values in int, strings, floats, arrays and nested dictionaries.
+Items will be a combo of key and it respective value.  
 
-2.7     Dictionary library.
-        We need to add support to a new data structure based on key, values
-        with the same functionality than python dictionaries and perl hashes.
-        This will be named "dictionaries" and will handle strings as keys, 
-        and values in int, strings, floats, arrays and nested dictionaries.
-        Items will be a combo of key and it respective value.
-
-        Functions supported will be 
-        -Creation of dictionaries
-        -Remotion of dictionaries and associated key-values
-        -Assignation of key and values
-        -Read key and values from dictionaries
-        -Read values from a dictionary, given a key.
-        -Remotion of items
-        -Display of items
-        -Packing and unpacking dictionaries, for data transfer and save/load
-         to and from storage.
-        Also macros will be provided for iterate through items and keys. 
+Functions supported will be 
+- Creation of dictionaries
+- Remotion of dictionaries and associated key-values
+- Assignation of key and values
+- Read key and values from dictionaries
+- Read values from a dictionary, given a key.
+- Remotion of items
+- Display of items
+- Packing and unpacking dictionaries, for data transfer and save/load
+to and from storage.
+Also macros will be provided for iterate through items and keys. 
 
 
 
-2.8     A configuration files parser, simple and easy to use. The parser 
-        should support BASH style comments. Also variables, assignations of 
-        Python style arrays, strings, and operators like '=', '+' and '+=".
+#### 2.8     A configuration files parser.
+The parser should support BASH style comments. Also variables, assignations of 
+Python style arrays, strings, and operators like '=', '+' and '+=".
 
-        Support for reserved words like "include" should be added.
-        When the parser finds this word, it should proceed to parse the
-        specified file, and once it completes that file parsing, continue with
-        the current file parsing. 
+Support for reserved words like "include" should be added.
+When the parser finds this word, it should proceed to parse the
+specified file, and once it completes that file parsing, continue with
+the current file parsing. 
 
-        Also support for "display" reserved word should be added, and it
-        should display strings, variables and all. 
+Also support for "display" reserved word should be added, and it
+should display strings, variables and all. 
 
-        The dictionaries facilities descripted in 2.7 should be used for the 
-        parser. It should create a whole new dictionary with the key-values 
-        parsed from the file. 
+The dictionaries facilities descripted in 2.7 should be used for the 
+parser. It should create a whole new dictionary with the key-values 
+parsed from the file. 
 
 Example of configuration file:
+```
 # this is a conf file
 
 ########
@@ -388,107 +383,107 @@ DATE_FORMAT="+%m%d%Y_%H%M%S"
 PRODUCT_DIR="/opt/gofs/"
 LOG_DIR=PRODUCT_DIR + "log/"
 CONF_DIR = PRODUCT_DIR + "etc/"
+```
 
 
-2.9     Hexadecimal dump facilities
-        Functions and code already exist for hexadecimal dumps of memory. 
+#### 2.9     Hexadecimal dump facilities
+Functions and code already exist for hexadecimal dumps of memory. 
 
-2.10    Stackdump functionalities
-        Functions and code for get the stackdump for debugging purposes is on
-        plan. 
-
-
-2.11    Cache Framework
-        A simple cache framework is needed to support all the other caches
-        will be added.
-
-        The simple cache framework design will provide generic flags for
-        operation, status and a simple posix thread, which will process the 
-        cache elements, running operations according with cache elements
-        flags. The cache data structure consists on:
-        -One list of elements 
-        -One list of dirty elements. 
-        -Cache operation and status Flags
-        -A thread ID
-        -A thread mutex
-        -Callbacks for the on_map(), on_evict(), on_flush().
-
-        Each element in the cache will have the next fields:
-        -64bit ID
-        -thread mutex
-        -flags
-        -access count
-        -a pointer to the parent cache data structure.
-
-        The framework make a distintion between the cache data structure and
-        the cache element data structure. Both are two separated entities. 
-
-        The cache structure interface:
-        -Alloc a cache
-        -Init cache ( populate cache with default values)
-        -Cache disable (flush and evict cache elements, stop thread)
-        -Cache enable  ( start thread)
-        -Cache sync ( evict all the elements, except pinned elements)
-        -Cache pause (pauses thread)
-        -Cache unpause
-        -Cache wait for flags ( wait for an specific flag)
-        -Cache lookup ( look for an element)
-
-        Cache elements:
-        -Element map ( map an element into a cache)
-        -Mark for eviction
-        -Mark dirty
-        -element pin
-        -element unpin
-        -element wait for flags
-        -evict 
-
-        So, most of those functions will be exported, some of them may 
-        be reimplemented by other caches built above this library. 
+#### 2.10    Stackdump functionalities
+Functions and code for get the stackdump for debugging purposes is on plan. 
 
 
-3       ECL Design
-        For the design of the Extents Caching Library, a Block size for the 
-        graph file system will be 8 Kbytes. So this is the minimal block size. 
+#### 2.11    Cache Framework
+A simple cache framework is needed to support all the other caches will be 
+added.
 
-        For this software component, a simple cache framework needs a design,
-        as the extents cache, slots cache, file cache, and graph cache will be 
-        needed.
+The simple cache framework design will provide generic flags for
+operation, status and a simple posix thread, which will process the 
+cache elements, running operations according with cache elements
+flags. The cache data structure consists on:
+- One list of elements 
+- One list of dirty elements. 
+- Cache operation and status Flags
+- A thread ID
+- A thread mutex
+- Callbacks for the on_map(), on_evict(), on_flush().
+
+Each element in the cache will have the next fields:
+- 64bit ID
+- thread mutex
+- flags
+- access count
+- a pointer to the parent cache data structure.
+
+The framework make a distintion between the cache data structure and
+the cache element data structure. Both are two separated entities. 
+The cache structure interface:
+- Alloc a cache
+- Init cache ( populate cache with default values)
+- Cache disable (flush and evict cache elements, stop thread)
+- Cache enable  ( start thread)
+- Cache sync ( evict all the elements, except pinned elements)
+- Cache pause (pauses thread)
+- Cache unpause
+- Cache wait for flags ( wait for an specific flag)
+- Cache lookup ( look for an element)
+
+Cache elements:
+- Element map ( map an element into a cache)
+- Mark for eviction
+- Mark dirty
+- element pin
+- element unpin
+- element wait for flags
+- evict 
+
+So, most of those functions will be exported, some of them may 
+be reimplemented by other caches built above this library. 
 
 
-        3.1 Extents Cache
-        Extents are groups of contiguous disk blocks. So, in order to make
-        faster IO operations, an extents cache will be used. An extent needs
-        a device block address and a number of contiguous block 
-        so this is the extent representation. This is mapped to memory. 
- 
-        It works in a similar way to a page cache, but we are caching extents
-        in memory and not only pages. So ideally a thread would be in charge 
-        of this cache, flushing out extents marked as "dirty" and keep in 
-        memory any "pinned" extent. Also operations like "sync" should flush
-        out all the cached extents in memory.
+### 3       ECL Design
+For the design of the Extents Caching Library, a Block size for the 
+graph file system will be 8 Kbytes. So this is the minimal block size. 
 
-        This extents cache makes lot of use or EIO, the framework cache and 
-        the bitmap library. 
+For this software component, a simple cache framework needs a design,
+as the extents cache, slots cache, file cache, and graph cache will be 
+needed.
 
 
-4       Metadata service
-        The metadata are key-value pairs. So the metadata service provides 
-        metadata storage and caching. The metadata is organized in slots, and
-        each slot is identified by an unsigned number, being the 0 exclusive
-        for the superblock, or an extent with the file data, which would be 
-        called "super extent". 
+####        3.1 Extents Cache
+Extents are groups of contiguous disk blocks. So, in order to make
+faster IO operations, an extents cache will be used. An extent needs
+a device block address and a number of contiguous block 
+so this is the extent representation. This is mapped to memory. 
 
-        The slots are indexed into a big contiguous table, named the "slot
-        index" which is an extent with slots data, like:
-        -slot ID
-        -slot inode owner
-        -slot edge owner 
-        -slot flags  ( which kind of owner, super block, inode of edge)
-        -extent address with the dictionary data 
+It works in a similar way to a page cache, but we are caching extents
+in memory and not only pages. So ideally a thread would be in charge 
+of this cache, flushing out extents marked as "dirty" and keep in 
+memory any "pinned" extent. Also operations like "sync" should flush
+out all the cached extents in memory.
+
+This extents cache makes lot of use or EIO, the framework cache and 
+the bitmap library. Also facilities for make an extent 
+
+
+#### 4       Metadata service
+The metadata are key-value pairs. So the metadata service provides 
+metadata storage and caching. The metadata is organized in slots, and
+each slot is identified by an unsigned number, being the 0 exclusive
+for the superblock, or an extent with the file data, which would be 
+called "super extent". 
+
+The slots are indexed into a big contiguous table, named the "slot index" 
+which is an extent with slots data, like:
+- slot ID
+- slot inode owner
+- slot edge owner 
+- slot flags  ( which kind of owner, super block, inode of edge)
+- extent address with the dictionary data 
     
-        The metadata service makes use of the Extents cache and the Dictionary
-        library descripted in 2.7. 
+The metadata service makes use of the Extents cache and the Dictionary
+library descripted in 2.7. Also using the EIO capacity for make extent disk 
+format, to create metadata slots on disk storage. 
 
 
 

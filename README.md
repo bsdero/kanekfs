@@ -225,15 +225,23 @@ So some of the planned modules:
    This will be the basis of the GOFS. We need to have a library and 
    also will be providing storage organization in extents and extents 
    caching. 
-3. **Metadata service (MetaServ).**
-   This service will provide metadata storage and caching. 
-4. **Object Storage Service (OStor)**
-   This service will provide Object Storage management and data caching. 
-5. **Graph FS service (GraphServ)**
+3. **Metadata Foundations (MetaF)**
+   Basic software funcionality for CRUD operations with Slots of key-values.
+   Includes tools for metadata storage creation, analysis, debugging, check.
+4. **Metadata service (MetaServ).**
+   This service will provide metadata storage caching.
+5. **Object Storage Foundations (OSTF)**
+   Basic Software functionality for CRUD operations for Object Storage and
+   the corresponding objects metadata
+6. **Object Storage Service (OStor)**
+   This service will provide Object Storage IO caching. 
+7. **Object Storage tools and utilities ( OSTools)**
+   Tools for Object Storage (creation, check, debugging)
+8. **Graph Storage Foundations (KFS)**
+   Elementary software functionality for Graph File System data structures
+9. **Graph FS service (KFS service)**
    This service will handle the graph data structure for the file system. 
-6. **Object Storage tools and utilities ( OSTutils)**
-   Binaries support for Object Storage mode 
-7. **Graph FS shell and commands (GraphUtils)**
+10. **Graph FS shell and commands (KFStools)**
    This will be binaries supporting the file system graph data structure. 
 
 
@@ -241,19 +249,28 @@ So, basically the software will be interacting like this with the OS/Kernel.
 
 
 ```
-+---------------------------------------+
-|            GraphUtils                 |
-+-----------+---------------------------+
-|OSTutils   |    Graphservice           |
-+-----------+------+                    |
-|        OStor     |                    |
-+           +------+-----+              |
-|           |MetaService |              |
-+-----------+------------+--------------+
-|                  ECL                  |
-+---------------------------------------+
-
++----------------------------------------+
+|                KFS Tools               |
+|                    +-------------------+
+|                    |  KFS service      |
++-----------+--------+-------------------+
+| OSTools   |    KFS                     |
++           +--------+                   |
+|           | OStor  |                   |
++-----------+--------+                   |
+|        OSTF        |                   |
++      +-------------+------------+      |
+|      |        MetaService       |      |
++      +--------------------------+      |
+|      |           MetaF          |      |
++------+--------------------------+------+
+|                  ECL                   |
++----------------------------------------+
+|                   FL                   |
++----------------------------------------+
 ```
+
+
 ### 2       Foundation Libraries (FL)
 A lot of different libraries needs to be designed. 
 - Tracing and logging macros and libraries.
@@ -302,10 +319,34 @@ is also selectable. This library also should allow to write:
 automatically. The bitmap may be created in memory, or created in
 another block device. Also it can be omitted. 
 2. Reserved blocks or extents, which wont be touched by the library.
-3. Create an extent format in a file or block device, in a similar
-fashion to a filesystem. 
+3. Create an extent disk format in a file or block device, in a similar
+fashion to a filesystem. This extent disk format will have a bitmap for mark 
+the used blocks in the device. 
 4. Provide representation of extents and bitmaps data structures in 
 both memory and disk, for keep track of the information easily. 
+
+
+Some of the interfaces:
+- Open a file 
+- Close a file 
+- Read extents into memory
+- write extents to disk
+- Alloc extent into memory
+
+The extents disk format help to store extents in block storage. It includes 
+an extent disk format descriptor, and a bitmap, which helps us to know which
+blocks are free or used. The extent disk format descriptor includes data
+for know the block address of the bitmap and how many blocks it takes. The 
+bitmap is stored at the end of the device, in the last blocks. The next 
+interfaces will be provided. 
+- Create an extent storage on file or disk, includes bitmap on disk.
+- Open an existing extent storage. The location in the device of the 
+  extent disk format descriptor is required. A bitmap on memory is created.
+- Reserve extents, alloc empty extents, update bitmap, mark blocks as reserved.
+- For each read and write of extents, synchronize bitmap
+
+
+
 
 #### 2.7     Dictionary library.
 We need to add support to a new data structure based on key, values
@@ -443,11 +484,8 @@ be reimplemented by other caches built above this library.
 
 ### 3       ECL Design
 For the design of the Extents Caching Library, a Block size for the 
-graph file system will be 8 Kbytes. So this is the minimal block size. 
-
-For this software component, a simple cache framework needs a design,
-as the extents cache, slots cache, file cache, and graph cache will be 
-needed.
+graph file system will be 8 Kbytes in size. So this is the standard 
+block size. 
 
 
 ####        3.1 Extents Cache
@@ -463,43 +501,176 @@ memory any "pinned" extent. Also operations like "sync" should flush
 out all the cached extents in memory.
 
 This extents cache makes lot of use or EIO, the framework cache and 
-the bitmap library. Also facilities for make an extent 
+the bitmap library.
+
+So, it provides most of the functionalities of the EIO library, plus the
+caching functionalities of the cache framework and updating the corresponding
+bitmap as needed. 
+
+Some of the interfaces:
+- Make an extents block 
+- Open/Read an specific extent (read an extent into memory)
+- Flush extent ( write into storage, mark the bitmap as occupied)
+- Reserve extent ( mark the bitmap as occupied, 
 
 
-### 4       Metadata service
-The metadata are key-value pairs. So the metadata service provides 
-metadata storage and caching. The metadata is organized in slots, and
-each slot is identified by an unsigned number, being the 0 exclusive
-for the superblock, or an extent with the file data, which would be 
-called "super extent". 
+### 4       Metadata foundations (MetaF)
+The metadata are key-value pairs. So the metadata foundations provides 
+metadata storage functionalities. The metadata is organized in slots, and
+each slot is identified by an unsigned number, being the 0 reserved and 
+exclusive for upper layers of the system.
 
 The slots are indexed into a big contiguous table, named the "slot index" 
-which is an extent with slots data, like:
-- slot ID
+which is an extent with a description of the slot, like:
+- slot ID ( a unique number)
 - slot inode owner
 - slot edge owner 
 - slot flags  ( which kind of owner, super block, inode of edge)
-- extent address with the dictionary data 
+- extent address with the slot data ( the dictionary corresponding to this 
+slot)  
+
+The slot index uses a bit map for register which slots are in use, in a 
+similar way to an inodes index bitmap, very common in traditional file systems.
+The slot index helps to locate the effective block address where the 
+corresponding dictionary is stored. The dictionary on disk is also called 
+"slot data". 
+
+This on-disk data structure, including the slot index, and slot data, is 
+called as "slots storage". The data structure for locate the slot index and 
+slot data on disk is called as "metadata storage descriptor". Is expected
+that the metadata storage descriptor to be stored in disk.
+The user can select how much portion of the file or block device will be
+used for slots storage, or maybe, all of it, considering the layer below, 
+which is ECL. This data is stored in the metadata storage descriptor.
+The metada storage descriptor includes:
+- Starting block of the slots index
+- Starting block of the slots data ( dictionaries of all the slots )
+- size in blocks of the slot index and the blocks data
+- how many slots are stored
+- the corresponding bitmap address for the used and free slots. 
+
+
+Functionality for create, read and update slots storage is also provided. 
     
-The metadata service makes use of the Extents cache and the Dictionary
-library descripted in 2.7. Also using the EIO capacity for make extent disk 
-format, to create metadata slots on disk storage. 
+The metadata foundations makes use of the Extents cache, the Dictionary
+library descripted in 2.7, and the bit map library. Also uses the EIO capacity
+for make extent disk format. 
 
-### 5 Object Storage Service
- 
+some of the interfaces:
+- Create slots storage ( user must specify which file or device to use, 
+  and specify the metadata storage descriptor )
+- Open a slot storage file or device, user must specify where in the
+  device is the metadata storage descriptor. 
+- Create a slot
+- Open a slot, given the slot number
+- Read a slot descriptor
+- Read slot data
+- Update slot descriptor
+- Update slot data
+- Close a slot
+- Reserve a slot from non used slots ( this operation also open the slot)
+- Evict a slot ( remove slot data and descriptor, and mark the slot as free)
+
+Includes some tools for:
+- create slots storage
+- dump slots data and dictionaries
+- dump metadata storage descriptor and extents storage descriptors.
+- Add data to an specific slot
+
+### 5       Metadata service
+Provides caching functionality to MetaF. 
+Also provides the next interfaces:
+- Open slot storage 
+- Get a new, empty slot ( Reserve a slot)
+- Open a slot
+- Read slot
+- Flush slot data
+- empty slot data
+- update slot descriptor
+- update slot data
+
+it uses the Metadata Foundations library, a lot. 
 
 
+### 6       Object Storage Foundations (OSTF)
+The object storage foundations is basically minimal functionality for 
+Object Storage. We should be able to:
+- Create File Objects 
+- Read File Objects
+- Update File Objects
+- Delete File Objects
 
-- kfs_slotd: a metadata service with direct access to block storage
-- kfs_mkslots: a tool for build metadata slots in block storage
-- kfs_obstrd: an object storage service for store and retrieve files in block storage
-- kfs_mkostor: a tool for build object storage in block storage
-- kfs_graphd: a graph daemon, with the graph file system structure and also is the interface with user apps and graph command line interface
-- kfs_mkgraph: a tool for build the graph file system
-- kaneksh: a CLI shell which interfaces with both posix and graph file system
-- kfs_mkfs a tool for build slots, storage and graph in a single block storage device
+The objects are identified by an super inode number or a hash as well.
+Both of them are unique. 
 
-Also diagnostics tools and scripts are in the roadmap.
+Additional files associated data can be stored in:
+- The corresponding inode table
+- one slot in slot storage.
+
+That means that the Object storage should be associated with slot storage, as
+it will store the metadata for each object. One slot per object.  
+
+Object storage, in our context works very similar to the standard areas
+in traditional computer file systems. Object storage consists of 
+different parts:
+1. Inode hash index ( fast location of inodes by hash) 
+2. Inode table ( maintains inode data structure)
+3. Inode bit map  ( keep used and free inodes)
+4. File objects blocks ( one or more extents per object can be assigned)
+5. Free blocks bitmap ( underlying ECL free blocks bitmap can be used)
+6. Slots Storage ( Metadata service will be used)
+
+The data with the on-disk location for this information will be called as an
+"Object Storage descriptor". This layer makes usage of the Metadata Services
+and the Extents cache. 
+
+#### 6.1    Inode Hash Index
+Is a simple space on disk, with indexed data, which helps to locate inodes by
+hash. So the algorithm, given a hash, returns the super inode number 
+corresponding to that hash. 
+
+#### 6.2    Inode Table 
+Maintains super inodes data structure.
+In this context, the inode ( or super inode) will have the next fields by
+default, all of them stored in the inode table:
+- Inode Name
+- Inodes hash 
+- Inode link count -not useful for OFS but it is for Graph Storage
+- User Id of owner
+- Group Id of owner
+- permissions 
+- size of file in bytes
+- timestamps ( creation time, last modification time, last access time)
+- slot ID 
+- data extent address
+- edges extent address
+
+#### 6.3    Inodes bit map. 
+Is a bit map which helps to know which inodes are in use and which are free.
+
+#### 6.4    File objects blocks
+Is a storage area used for object storage files data. Also graph data can be 
+stored. 
+
+#### 6.5    Free blocks bitmap
+Keeps track of the used and free blocks. Underlying ECL can be used here. 
+
+#### 6.6    Slots storage 
+Extra metadata which the user creates for object files will be stored in 
+slots storage. 
+
+
+### 7       OSTools
+Some tools for object storage will be created here, including:
+
+### 8       Graph Storage Foundations (KFS)
+Elementary software functionality for Graph File System data structures
+
+### 9       Graph FS service (KFS service)
+This service will handle the graph data structure for the file system. 
+
+### 10      Graph FS shell and commands (KFStools)
+shell, and some programs supporting the file system graph data structure. 
 
 
 

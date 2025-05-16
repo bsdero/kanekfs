@@ -230,12 +230,12 @@ So some of the planned modules:
    Includes tools for metadata storage creation, analysis, debugging, check.
 4. **Metadata service (MetaServ).**
    This service will provide metadata storage caching.
-5. **Object Storage Foundations (OSTF)**
+5. **Kanek Object Storage Foundations (KOSF)**
    Basic Software functionality for CRUD operations for Object Storage and
    the corresponding objects metadata
-6. **Object Storage Service (OStor)**
+6. **Kanek Object Storage Service (KOS)**
    This service will provide Object Storage IO caching. 
-7. **Object Storage tools and utilities ( OSTools)**
+7. **Kanek Object Storage tools and utilities ( KOSTools)**
    Tools for Object Storage (creation, check, debugging)
 8. **Graph Storage Foundations (KFS)**
    Elementary software functionality for Graph File System data structures
@@ -254,9 +254,9 @@ So, basically the software will be interacting like this with the OS/Kernel.
 |                    +-------------------+
 |                    |  KFS service      |
 +-----------+--------+-------------------+
-| OSTools   |    KFS                     |
+| KOSTools  |    KFS                     |
 +           +--------+                   |
-|           | OStor  |                   |
+|           |  KOS   |                   |
 +-----------+--------+                   |
 |        OSTF        |                   |
 +      +-------------+------------+      |
@@ -310,20 +310,45 @@ functions are useful for bitmap management in block storage.
 Code for this does exist already
     
 #### 2.6     EIO (IO library for read/write extents/blocks into block devices and files.)
-An extent is a group of contiguous blocks, and it needs the starting
-block address and the number of blocks. 
+An extent is a group of contiguous blocks. In order to get access to an 
+extent we need starting block address and the number of blocks. 
+The starting block address and the number of blocks, together are called an
+"extent descriptor". 
 
-By default the block size is 8KBytes, and 16KBytes length per block
-is also selectable. This library also should allow to write:
-1. A bitmap for keep track of block and extents reserved and released, 
-automatically. The bitmap may be created in memory, or created in
-another block device. Also it can be omitted. 
-2. Reserved blocks or extents, which wont be touched by the library.
-3. Create an extent disk format in a file or block device, in a similar
-fashion to a filesystem. This extent disk format will have a bitmap for mark 
-the used blocks in the device. 
-4. Provide representation of extents and bitmaps data structures in 
-both memory and disk, for keep track of the information easily. 
+"User Extents" are extents with user data. 
+An "extent index" is a contiguous array of extents descriptors. 
+A "blocks bitmap" is a bitmap which helps to know which blocks in the device
+are in use or free. By default the block size is 8KBytes, although 16, 32 or
+64 KBytes length per block is also selectable. 
+An "Extents storage descriptor" describes:
+- Block size 
+- Extent index start block address and number of blocks
+- Block bitmap start block address and number of blocks
+- User extents start block address and number of blocks
+
+
+The extents disk format help to store extents in a better organized way in 
+block storage. It includes the items:
+- Extents storage descriptor (optional, also can be stored elsewhere). 
+  If stored, it should be stored in the block 0.
+- Extents index (optional, can be stored elsewhere). If stored should 
+  start at block 1
+- Block bitmap (optional, can be stored elsewhere). If stored, should be
+  in the last block of the device/file. 
+- User extents block address
+
+All of these, is called "extents storage". 
+
+The bitmap is stored at the end of the device, in the last blocks. The next 
+interfaces will be provided.
+
+- Create extent storage on file or device.
+- Open an existing extent storage file or device.
+- Reserve extents 
+- Read extents
+- Write extents
+- Free extents
+- Close extents
 
 
 Some of the interfaces:
@@ -333,19 +358,25 @@ Some of the interfaces:
 - write extents to disk
 - Alloc extent into memory
 
-The extents disk format help to store extents in block storage. It includes 
-an extent disk format descriptor, and a bitmap, which helps us to know which
-blocks are free or used. The extent disk format descriptor includes data
-for know the block address of the bitmap and how many blocks it takes. The 
-bitmap is stored at the end of the device, in the last blocks. The next 
-interfaces will be provided. 
-- Create an extent storage on file or disk, includes bitmap on disk.
-- Open an existing extent storage. The location in the device of the 
-  extent disk format descriptor is required. A bitmap on memory is created.
-- Reserve extents, alloc empty extents, update bitmap, mark blocks as reserved.
-- For each read and write of extents, synchronize bitmap
 
-
+Below we have a representation of extents storage.
+```
+        Extent Storage      
++-----------------------------+
+| Extent Storage descriptor   |<--This descripts extents storage
++-----------------------------+
+| Extents index               |<--This holds extents descriptors
++-----------------------------+
+| User extents                |<--User stores data here
+|                             |
+|                             |
+|                             |
+|                             |
++-----------------------------+
+| Block bitmap                |<--This helps to know which blocks are 
+| 010000110011101010101000000 |   in use or free.
++-----------------------------+
+```
 
 
 #### 2.7     Dictionary library.
@@ -548,7 +579,22 @@ The metada storage descriptor includes:
 - size in blocks of the slot index and the blocks data
 - how many slots are stored
 - the corresponding bitmap address for the used and free slots. 
-
+ 
+Below we have a representation of slots storage.
+```
++-----------------------------+
+| Metadata Storage Descriptor |<-- this describes the slots storage
++-----------------------------+ 
+| Slots Index                 |<-- this helps to locate key-values based from
++-----------------------------+    a slot number.
+| Slots data ( dictonaries)   |        
+|                             |<-- this are key-values.
+|                             |
+|                             |
++-----------------------------+
+| Slots bitmap                |<-- this helps to know which slots are in use
++-----------------------------+    or free
+```
 
 Functionality for create, read and update slots storage is also provided. 
     
@@ -592,59 +638,113 @@ Also provides the next interfaces:
 it uses the Metadata Foundations library, a lot. 
 
 
-### 6       Object Storage Foundations (OSTF)
-The object storage foundations is basically minimal functionality for 
-Object Storage. We should be able to:
-- Create File Objects 
-- Read File Objects
-- Update File Objects
-- Delete File Objects
+### 6       Kanek Object Storage Foundations (KOSF)
 
-The objects are identified by an super inode number or a hash as well.
-Both of them are unique. 
 
-Additional files associated data can be stored in:
-- The corresponding inode table
-- one slot in slot storage.
+#### 6.1        Super Inode
+The inode is a data structure which is very well known in traditional file 
+systems. In Kanek Object Storage and Kanek Graph File system, inodes will be
+used. Inodes are very well suited for Object Storage, however we would be 
+adding an extra pointer, as the inodes not only stores data of a file, but
+also edges for this graph node. 
 
-That means that the Object storage should be associated with slot storage, as
-it will store the metadata for each object. One slot per object.  
+That means we will be using extra pointer(s). This expanded inode is called 
+as Super Inode. 
 
-Object storage, in our context works very similar to the standard areas
-in traditional computer file systems. Object storage consists of 
-different parts:
-1. Inode hash index ( fast location of inodes by hash) 
-2. Inode table ( maintains inode data structure)
-3. Inode bit map  ( keep used and free inodes)
-4. File objects blocks ( one or more extents per object can be assigned)
-5. Free blocks bitmap ( underlying ECL free blocks bitmap can be used)
-6. Slots Storage ( Metadata service will be used)
-
-The data with the on-disk location for this information will be called as an
-"Object Storage descriptor". This layer makes usage of the Metadata Services
-and the Extents cache. 
-
-#### 6.1    Inode Hash Index
-Is a simple space on disk, with indexed data, which helps to locate inodes by
-hash. So the algorithm, given a hash, returns the super inode number 
-corresponding to that hash. 
-
-#### 6.2    Inode Table 
-Maintains super inodes data structure.
-In this context, the inode ( or super inode) will have the next fields by
-default, all of them stored in the inode table:
-- Inode Name
-- Inodes hash 
-- Inode link count -not useful for OFS but it is for Graph Storage
+will have the next fields by default, all of them stored in the inode table:
 - User Id of owner
 - Group Id of owner
 - permissions 
 - size of file in bytes
 - timestamps ( creation time, last modification time, last access time)
 - slot ID 
-- data extent address
-- edges extent address
+- Flags
+- data extent pointer
+- edges extent pointer ( notice we have both, not just one)
+- Inode link count (not useful for OFS but it is for Graph Storage)
 
+#### 6.2        Object Storage Buckets
+The object storage foundations is basically minimal functionality for 
+Object Storage. The object storage allows "buckets" which are used for 
+create object storage with in. The buckets works pretty much like directories
+in standard file system, except that bucket can not store nested data, means,
+a bucket can not be stored in another bucket. 
+
+
+The metadata of the bucket: 
+- Name
+- User ID of owner
+- Group ID of owner
+- Permissions
+- Time Stamp
+- timestamps ( creation time, last modification time, last access time)
+- slot ID 
+- Flags
+
+A super inode is used to store a bucket. Additional metadata of a bucket
+can be stored in slots. Same for Object Storage Files.
+
+The file entries of a bucket containes object files names, and super inodes
+numbers. This darta can be stored in an extent or blocks, pointed
+by the edges extent pointer, in a very similar fashion to directories in 
+traditional file systems. 
+
+#### 6.3        Object Storage API
+We should be able to:
+- Create buckets
+- Create File Objects in a bucket
+- Read File Objects 
+- Update File Objects 
+- Delete File Objects
+- List objects in a bucket
+- Remove bucket ( this operation removes all the objects in the bucket, 
+                  and the associated metadata)
+
+
+
+#### 6.4        Object Storage Block Device Organization
+Object storage, in our context has areas on block storage which are very 
+similar to the standard areas in traditional computer file systems. 
+
+1. Root inode. the root super inode works pretty much like the root
+inode in traditional file systems. It basically content entries to all the
+buckets available in the Object Storage. 
+2. super Inodes table ( maintains super inodes data structures table)
+3. Super Inodes bitmap  ( a bitmap to keep used and free super inodes)
+4. File objects blocks ( one or more extents per object can be assigned)
+5. Free blocks bitmap ( underlying ECL free blocks bitmap can be used)
+6. Slots Storage ( Metadata service will be used)
+7. Object Storage SuperBlock. Pretty much like the traditional file systems.
+Contents block pointert to all of this data, usually in the first block of 
+the device. 
+
+The data with the on-disk location for this information will be called as an
+"Object Storage superblock". This layer makes usage of the Metadata Services
+and the Extents cache. 
+
+Below we have a representation of Object Storage.
+```
+
++------------------------------+
+|  Object Storage SuperBlock   |
++------------------------------+
+| Slots Storage                |
++------------------------------+
+| Inodes table                 |
++------------------------------+
+| Inodes bitmap                |
++------------------------------+
+| Object Files                 |
+|                              |
++------------------------------+
+| Blocks bitmap                |
++------------------------------+
+```
+
+#### 6.3    Root Inode
+
+#### 6.2    Inode Table 
+Maintains super inodes data structure.
 #### 6.3    Inodes bit map. 
 Is a bit map which helps to know which inodes are in use and which are free.
 
@@ -659,12 +759,23 @@ Keeps track of the used and free blocks. Underlying ECL can be used here.
 Extra metadata which the user creates for object files will be stored in 
 slots storage. 
 
+### 7       Kanek Object Storage Service (KOS) 
+Provides a service for Kanek Object Storage. 
+It includes a daemon, and exportable directory less file system. 
 
-### 7       OSTools
+
+
+### 8       Kanek Object Storage Tools (KOSTools)
 Some tools for object storage will be created here, including:
+- mount kanek object storage given a bucket
+- umount kanek object storage
+- S3 API libraries and commands 
+
 
 ### 8       Graph Storage Foundations (KFS)
-Elementary software functionality for Graph File System data structures
+Elementary software functionality for Graph File System data structures.
+At this point, the Graph structure of the GOFS 
+
 
 ### 9       Graph FS service (KFS service)
 This service will handle the graph data structure for the file system. 

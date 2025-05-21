@@ -228,46 +228,37 @@ So some of the planned modules:
 3. **Metadata Foundations (MetaF)**
    Basic software funcionality for CRUD operations with Slots of key-values.
    Includes tools for metadata storage creation, analysis, debugging, check.
-4. **Metadata service (MetaServ).**
+4. **Metadata service (MetaD).**
    This service will provide metadata storage caching.
-5. **Kanek Object Storage Foundations (KOSF)**
-   Basic Software functionality for CRUD operations for Object Storage and
-   the corresponding objects metadata
-6. **Kanek Object Storage Service (KOS)**
+5. **Kanek Storage Foundations (KFSStorage)**
+   Basic Software functionality for Data Storage and objects metadata
+6. **Kanek Storage Service (KFSD)**
    This service will provide Object Storage IO caching. 
-7. **Kanek Object Storage tools and utilities ( KOSTools)**
+7. **Kanek Storage tools and utilities ( KFSTools)**
    Tools for Object Storage (creation, check, debugging)
-8. **Graph Storage Foundations (KFS)**
-   Elementary software functionality for Graph File System data structures
-9. **Graph FS service (KFS service)**
-   This service will handle the graph data structure for the file system. 
-10. **Graph FS shell and commands (KFStools)**
-   This will be binaries supporting the file system graph data structure. 
 
 
 So, basically the software will be interacting like this with the OS/Kernel.
 
 
 ```
-+----------------------------------------+
-|                KFS Tools               |
-|                    +-------------------+
-|                    |  KFS service      |
-+-----------+--------+-------------------+
-| KOSTools  |    KFS                     |
-+           +--------+                   |
-|           |  KOS   |                   |
-+-----------+--------+                   |
-|        OSTF        |                   |
-+      +-------------+------------+      |
-|      |        MetaService       |      |
-+      +--------------------------+      |
-|      |           MetaF          |      |
-+------+--------------------------+------+
-|                  ECL                   |
-+----------------------------------------+
-|                   FL                   |
-+----------------------------------------+
+
+   KFS Stack
++-------------+
+|  KFS Tools  |
++-------------+
+|  KFSD       |
++-------------+
+|  KFSStorage |
++-------------+
+|  MetaD      |
++-------------+
+|  MetaF      |
++-------------+
+|  ECL        |
++-------------+
+|  FL         |
++-------------+
 ```
 
 
@@ -512,14 +503,13 @@ Cache elements:
 So, most of those functions will be exported, some of them may 
 be reimplemented by other caches built above this library. 
 
-
 ### 3       ECL Design
 For the design of the Extents Caching Library, a Block size for the 
 graph file system will be 8 Kbytes in size. So this is the standard 
 block size. 
 
 
-####        3.1 Extents Cache
+####        3.1 Extents cache
 Extents are groups of contiguous disk blocks. So, in order to make
 faster IO operations, an extents cache will be used. An extent needs
 a device block address and a number of contiguous block 
@@ -567,11 +557,11 @@ corresponding dictionary is stored. The dictionary on disk is also called
 "slot data". 
 
 This on-disk data structure, including the slot index, and slot data, is 
-called as "slots storage". The data structure for locate the slot index and 
+called as "metadata storage". The data structure for locate the slot index and 
 slot data on disk is called as "metadata storage descriptor". Is expected
 that the metadata storage descriptor to be stored in disk.
 The user can select how much portion of the file or block device will be
-used for slots storage, or maybe, all of it, considering the layer below, 
+used for metadata storage, or maybe, all of it, considering the layer below, 
 which is ECL. This data is stored in the metadata storage descriptor.
 The metada storage descriptor includes:
 - Starting block of the slots index
@@ -580,10 +570,10 @@ The metada storage descriptor includes:
 - how many slots are stored
 - the corresponding bitmap address for the used and free slots. 
  
-Below we have a representation of slots storage.
+Below we have a representation of metadata storage.
 ```
 +-----------------------------+
-| Metadata Storage Descriptor |<-- this describes the slots storage
+| Metadata Storage Descriptor |<-- this describes the metadata storage
 +-----------------------------+ 
 | Slots Index                 |<-- this helps to locate key-values based from
 +-----------------------------+    a slot number.
@@ -596,57 +586,54 @@ Below we have a representation of slots storage.
 +-----------------------------+    or free
 ```
 
-Functionality for create, read and update slots storage is also provided. 
+Functionality for create, read and update metadata storage is also provided. 
     
 The metadata foundations makes use of the Extents cache, the Dictionary
 library descripted in 2.7, and the bit map library. Also uses the EIO capacity
 for make extent disk format. 
 
 some of the interfaces:
-- Create slots storage ( user must specify which file or device to use, 
+- Create metadata storage ( user must specify which file or device to use, 
   and specify the metadata storage descriptor )
 - Open a slot storage file or device, user must specify where in the
   device is the metadata storage descriptor. 
-- Create a slot
 - Open a slot, given the slot number
-- Read a slot descriptor
-- Read slot data
-- Update slot descriptor
-- Update slot data
+- Get a new, empty slot (reserve a slot). This action open a slot also.
+- Read slot data/descriptor
+- Update slot data/descriptor
 - Close a slot
-- Reserve a slot from non used slots ( this operation also open the slot)
 - Evict a slot ( remove slot data and descriptor, and mark the slot as free)
 
 Includes some tools for:
-- create slots storage
+- create metadata storage
 - dump slots data and dictionaries
 - dump metadata storage descriptor and extents storage descriptors.
 - Add data to an specific slot
 
-### 5       Metadata service
+### 5       Metadata Storage service ( METAD)
 Provides caching functionality to MetaF. 
 Also provides the next interfaces:
-- Open slot storage 
+- Open a metadata storage file/device
 - Get a new, empty slot ( Reserve a slot)
-- Open a slot
-- Read slot
+- Open a specific slot ( needs a slot number)
+- Read slot descriptor, and metadata
 - Flush slot data
-- empty slot data
+- 
 - update slot descriptor
 - update slot data
 
 it uses the Metadata Foundations library, a lot. 
 
 
-### 6       Kanek Object Storage Foundations (KOSF)
-
+### 6       Kanek Storage Foundations (KFSStorage)
+This layer provides basic functionality for store data into the file system.
 
 #### 6.1        Super Inode
 The inode is a data structure which is very well known in traditional file 
 systems. In Kanek Object Storage and Kanek Graph File system, inodes will be
-used. Inodes are very well suited for Object Storage, however we would be 
+used. Inodes are very well suited for store data files, however we would be 
 adding an extra pointer, as the inodes not only stores data of a file, but
-also edges for this graph node. 
+also edges for this graph node.
 
 That means we will be using extra pointer(s). This expanded inode is called 
 as Super Inode. 
@@ -663,125 +650,164 @@ will have the next fields by default, all of them stored in the inode table:
 - edges extent pointer ( notice we have both, not just one)
 - Inode link count (not useful for OFS but it is for Graph Storage)
 
-#### 6.2        Object Storage Buckets
-The object storage foundations is basically minimal functionality for 
-Object Storage. The object storage allows "buckets" which are used for 
-create object storage with in. The buckets works pretty much like directories
-in standard file system, except that bucket can not store nested data, means,
-a bucket can not be stored in another bucket. 
+
+#### 6.2        Adding content to inodes.
+In order to add user data to inodes, the data extent pointer will be used.
+It will be pointing to an extent data structure in storage. 
+
+#### 6.3        Adding edges to an inode
+Is basically the same operation that to add directory entries to an inode. 
+However we're in a graph, so entries will be added to both inodes. 
+
+Take this example
+
+```
++--------+       +--------+
+|        |       |        |
+|        +------>+        |
+| File A |       | File B |
+|        +<------+        |
+|        |       |        |
++--------+       +--------+
+```
+We can see two files connected with two edges. Two edges connecting the 
+same inodes are called "links". 
+
+So, for each edge we will have: 
+- entry name of the pointed node
+- inode ID of the pointed node
+- Link ID ( same for both edges, unique for both inodes)
+- Slot ID ( same for both edges)
+- Flags  
+
+The flags field will have two flags, independent one entry to the other:
+- Traversable        : If 0, the edge is just a link, if 1 it can be 
+                       traversed like a directory entry
+- Visible            : if 0, entry not visible, if 1, entry is visible
+
+The entries will be stored in a data structure in the edges extent pointer. 
+
+Notice that, same than the inodes and the super block, the links can also have
+a slot ID. 
 
 
-The metadata of the bucket: 
-- Name
-- User ID of owner
-- Group ID of owner
-- Permissions
-- Time Stamp
-- timestamps ( creation time, last modification time, last access time)
-- slot ID 
-- Flags
-
-A super inode is used to store a bucket. Additional metadata of a bucket
-can be stored in slots. Same for Object Storage Files.
-
-The file entries of a bucket containes object files names, and super inodes
-numbers. This darta can be stored in an extent or blocks, pointed
-by the edges extent pointer, in a very similar fashion to directories in 
-traditional file systems. 
-
-#### 6.3        Object Storage API
-We should be able to:
-- Create buckets
-- Create File Objects in a bucket
-- Read File Objects 
-- Update File Objects 
-- Delete File Objects
-- List objects in a bucket
-- Remove bucket ( this operation removes all the objects in the bucket, 
-                  and the associated metadata)
-
-
-
-#### 6.4        Object Storage Block Device Organization
-Object storage, in our context has areas on block storage which are very 
+#### 6.4        Graph Storage 
+Graph Storage Block Device Organization
+Graph storage, in our context has areas on block storage which are very 
 similar to the standard areas in traditional computer file systems. 
 
-1. Root inode. the root super inode works pretty much like the root
-inode in traditional file systems. It basically content entries to all the
-buckets available in the Object Storage. 
-2. super Inodes table ( maintains super inodes data structures table)
-3. Super Inodes bitmap  ( a bitmap to keep used and free super inodes)
-4. File objects blocks ( one or more extents per object can be assigned)
-5. Free blocks bitmap ( underlying ECL free blocks bitmap can be used)
-6. Slots Storage ( Metadata service will be used)
-7. Object Storage SuperBlock. Pretty much like the traditional file systems.
-Contents block pointert to all of this data, usually in the first block of 
+1. Graph Storage Super block. Pretty much like the traditional file systems.
+Contents block pointers to all of this data, usually in the first block of 
 the device. 
+2. metadata storage ( Metadata service will be used)
+3. super Inodes table ( maintains super inodes data structures table)
+4. File objects blocks ( one or more extents per object can be assigned)
+5. Super Inodes bitmap  ( a bitmap to keep used and free super inodes)
+6. Free blocks bitmap ( underlying ECL free blocks bitmap can be used)
 
-The data with the on-disk location for this information will be called as an
-"Object Storage superblock". This layer makes usage of the Metadata Services
-and the Extents cache. 
-
-Below we have a representation of Object Storage.
+Below we have a representation of Graph Storage.
 ```
 
 +------------------------------+
-|  Object Storage SuperBlock   |
+| Graph Storage superblock     |
 +------------------------------+
-| Slots Storage                |
+| metadata storage             |
 +------------------------------+
 | Inodes table                 |
 +------------------------------+
 | Inodes bitmap                |
 +------------------------------+
-| Object Files                 |
+| User files extents           |
 |                              |
 +------------------------------+
 | Blocks bitmap                |
 +------------------------------+
 ```
 
-#### 6.3    Root Inode
+#### 6.5        Graph Storage with extern metadata storage
+We may have metadata storage in another device/file. For that case, the 
+location for that metadata needs to be stored in some place within the block 
+where the superblock is stored. Also a key to open that metadata storage is
+required. 
 
-#### 6.2    Inode Table 
-Maintains super inodes data structure.
-#### 6.3    Inodes bit map. 
-Is a bit map which helps to know which inodes are in use and which are free.
+#### 6.6        Graph Storage with extern User Files Extents
+In order to store user files in another block device of file, extents storage
+descripted in 2.6 can be used. So we can have a scalable Graph Storage
+with separated metadata storage, user data storage and graph storage. 
 
-#### 6.4    File objects blocks
-Is a storage area used for object storage files data. Also graph data can be 
-stored. 
+ 
+Some of the API calls are posix, others are not. 
+- gcreat()         Create a file
+- gopen()          Open a file
+- gwrite()         Write into a file
+- gread()          Read from a file
+- gclose()         Close a file
+- gseek()          Seek inside a file
+- gsetmeta()       Set key-value
+- ggetmeta()       Read key
+- grmmeta()        Delete key
+- gstat()          File stat
+- giperm()         iperm for a process
+- gmklink()        Makes a link to other node
+- grmlink()        Unlink a node.
+- gmkdir           Make a traversable link
+- gchangedir()     Change location
+- getpwd()         Get location 
+- gstatfs()        Status of the file system
+- groot()          Change root super inode
+- gclod()          Clone data extents into a new inode
+- gcloe()          clone links into a new inode
+- gchmod()         Change permissions
+- gchdat()         Change data permissions
+- gched()          Change edge permissions
+- gchino()         Change inode permissions
+- grddir()         read traversable links
+- grdedg()         read all links
+- ghid()           hide a specific link
+- gtrav()          set a link as travesarble
 
-#### 6.5    Free blocks bitmap
-Keeps track of the used and free blocks. Underlying ECL can be used here. 
 
-#### 6.6    Slots storage 
-Extra metadata which the user creates for object files will be stored in 
-slots storage. 
+### 7       Kanek Storage Service (KFSD)
+This service will handle the graph data structure for the file system.
+It will handle shell context for the processes running in the file system. 
+Among other things, the shell context would handle:
+- uid and gid of the program
+- umask 
+- environment variables: $HOME, $PATH, $USER and more
+- current working directory
+- shell aliases and functions
+- pid and ppid 
 
-### 7       Kanek Object Storage Service (KOS) 
-Provides a service for Kanek Object Storage. 
-It includes a daemon, and exportable directory less file system. 
-
-
-
-### 8       Kanek Object Storage Tools (KOSTools)
-Some tools for object storage will be created here, including:
-- mount kanek object storage given a bucket
-- umount kanek object storage
-- S3 API libraries and commands 
+It should support concurrency. 
 
 
-### 8       Graph Storage Foundations (KFS)
-Elementary software functionality for Graph File System data structures.
-At this point, the Graph structure of the GOFS 
-
-
-### 9       Graph FS service (KFS service)
-This service will handle the graph data structure for the file system. 
-
-### 10      Graph FS shell and commands (KFStools)
+### 8      Kanek Storage tools and utilities ( KFSTools)
+This layer provides binaries for the graph storage 
 shell, and some programs supporting the file system graph data structure. 
+Some binaries:
+- kansh 
+- ls
+- cd
+- pwd
+- mk
+- rm 
+- cp
+- cpin
+- mv
+- mvin
+- cat 
+- links
+- echo
+- chmod
+- chown
+- chgrp
+- ched
+- chdat
+- chino
+- stat
+- fstat
+- meta 
+
 
 
 

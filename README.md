@@ -771,30 +771,34 @@ Some of the API calls are posix, others are not.
 This service will handle the graph data structure for the file system.
 It will handle shell context for the processes running in the file system. 
 Among other things, the shell context would handle:
-- uid and gid of the program
-- umask 
+- uid and gid of the programs
+- umask  
 - environment variables: $HOME, $PATH, $USER and more
 - current working directory
 - shell aliases and functions
 - pid and ppid 
 
-It should support concurrency. 
+It should support concurrency, as potentially many clients would be having
+access. 
 
 
 ### 8      Kanek Storage tools and utilities ( KFSTools)
 This layer provides binaries for the graph storage 
 shell, and some programs supporting the file system graph data structure. 
 Some binaries:
-- kansh 
-- ls
-- cd
-- pwd
-- mk
-- rm 
-- cp
-- cpin
-- mv
-- mvin
+- kansh            commands shell compatible with Graph File system
+- ls               list files
+- cd/go            change location
+- pwd/wh           print current directory                       
+- mk file          mk file (similar to touch)
+- rm file          unlink node 
+- cp file1 file2   copy file1 to file2 (replace file2 data with file1's)
+- cpin file1 file2 copy file1 into file2 ( create a new node in file2 and 
+                                           copy file1 data into that new node)
+- mv file1 file2   move file1 to file2 (replace file2 node with file1 node)
+- mvin file1 file2 move file1 into file2 ( move file2, unlinking into a new node linked 
+                                            with 
+                                           
 - cat 
 - links
 - echo

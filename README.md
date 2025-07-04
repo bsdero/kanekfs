@@ -228,13 +228,15 @@ So some of the planned modules:
 3. **Metadata Foundations (MetaF)**
    Basic software funcionality for CRUD operations with Slots of key-values.
    Includes tools for metadata storage creation, analysis, debugging, check.
-4. **Metadata service (MetaD).**
+4. **Metadata Index (MetaNdx)** 
+   Basic functionality for fast keys-values searches
+5. **Metadata service (MetaD).**
    This service will provide metadata storage caching.
-5. **Kanek Storage Foundations (KFSStorage)**
+6. **Kanek Storage Foundations (KFSStorage)**
    Basic Software functionality for Data Storage and objects metadata
-6. **Kanek Storage Service (KFSD)**
+7. **Kanek Storage Service (KFSD)**
    This service will provide Object Storage IO caching. 
-7. **Kanek Storage tools and utilities ( KFSTools)**
+8. **Kanek Storage tools and utilities ( KFSTools)**
    Tools for Object Storage (creation, check, debugging)
 
 
@@ -245,13 +247,15 @@ So, basically the software will be interacting like this with the OS/Kernel.
 
    KFS Stack
 +-------------+
-|  KFS Tools  |
+|  KFSTools   |
 +-------------+
 |  KFSD       |
 +-------------+
 |  KFSStorage |
 +-------------+
 |  MetaD      |
++-------------+
+|  MetaNdx    |
 +-------------+
 |  MetaF      |
 +-------------+
@@ -534,7 +538,6 @@ Some of the interfaces:
 - Flush extent ( write into storage, mark the bitmap as occupied)
 - Reserve extent ( mark the bitmap as occupied, 
 
-
 ### 4       Metadata foundations (MetaF)
 The metadata are key-value pairs. So the metadata foundations provides 
 metadata storage functionalities. The metadata is organized in slots, and
@@ -610,7 +613,45 @@ Includes some tools for:
 - dump metadata storage descriptor and extents storage descriptors.
 - Add data to an specific slot
 
-### 5       Metadata Storage service ( METAD)
+### 5       Metadata Index (MetaNdx) 
+## Metadata Index
+
+Kanek FS includes a high-performance, persistent indexing subsystem designed to allow for fast and complex queries on gnode metadata. While the core filesystem is organized as a graph, this secondary indexing layer provides the query engine with a direct path to specific nodes based on their attributes, avoiding slow, full-graph scans.
+
+This subsystem is built on a hybrid model, using the most efficient data structure for each type of metadata field, all powered by a robust underlying storage engine.
+
+### Core Indexing Structures
+
+* **B+-Tree (Primary Index):** For most metadata fields—including numerical data, timestamps, and fixed strings—Kanek FS employs a **B+-Tree**. This structure is the industry standard for database indexing due to its exceptional performance on both exact-match lookups (e.g., `status = "published"`) and range queries (e.g., `size > 1024`). Its self-balancing, disk-friendly nature ensures that query performance remains consistently fast (O(log n)) as the dataset grows.
+
+* **Inverted Index (For Text and Tags):** For full-text search on string fields and for querying array-based tags, the system utilizes a specialized **Inverted Index**. This index maps each unique term (or tag) to a list of the gnode IDs that contain it, enabling highly efficient set-based operations like finding all files tagged with "report" AND "confidential."
+
+### Underlying Storage Engine: The LSM-Tree
+
+Underpinning these indexing structures is a high-performance Key-Value storage engine built on a **Log-Structured Merge-Tree (LSM-Tree)** architecture. This design is optimized for heavy write workloads and fast point-and-range lookups, making it an ideal foundation for managing the B+-Tree and Inverted Index data.
+
+The engine consists of several key components:
+
+* **Write-Ahead Log (WAL):** To ensure durability, every write operation (`put` or `delete`) is first appended to a sequential log on disk. In the event of a system crash, the WAL can be replayed to fully restore the state of the system, guaranteeing zero data loss for committed writes.
+
+* **Memtable (In-Memory Write Buffer):** Simultaneously with the WAL write, the new key-value pair is inserted into the `Memtable`, a sorted data structure residing entirely in RAM. We utilize a **Skip List** for the Memtable, chosen for its excellent concurrency performance and efficient sorted iteration. All incoming writes are buffered here, and reads will always check the Memtable first, providing extremely low-latency access for the most recent data.
+
+* **SSTables (On-Disk Storage):** When the Memtable reaches a configurable size threshold, it is flushed to disk as an immutable **SSTable** (Sorted String Table). An SSTable is a file containing key-value pairs sorted by key, which allows for very fast lookups. Each SSTable is accompanied by a **Bloom Filter** to rapidly check for the non-existence of a key, avoiding unnecessary disk I/O.
+
+* **Compaction (Background Maintenance):** A background process continually merges SSTables from different levels of the tree. This crucial process cleans up overwritten or deleted data, reclaims disk space, and reduces the number of files that need to be checked during a read, thereby maintaining high query performance.
+
+### Query Execution Flow
+
+When a query with a `where` clause is received, the engine leverages this integrated indexing subsystem to optimize the operation:
+
+1.  **Index Selection:** The engine parses the query and identifies which metadata fields can be used for an index-based lookup.
+2.  **Candidate Selection:** It then queries the corresponding B+-Tree or Inverted Index to retrieve a list of candidate `gnode IDs` that match the filter conditions. For compound queries with multiple `AND`/`OR` clauses, the engine performs intersections or unions on these lists of IDs.
+3.  **Gnode Retrieval:** Only after narrowing the result set down to a small list of relevant IDs does the engine fetch the full gnode data from the core storage layer.
+
+This "index-first" approach, powered by the LSM-Tree engine, ensures that Kanek FS can filter through billions of nodes in milliseconds, providing the speed required for demanding, data-intensive applications.
+
+
+### 6       Metadata Storage service ( METAD)
 Provides caching functionality to MetaF. 
 Also provides the next interfaces:
 - Open a metadata storage file/device
@@ -625,10 +666,10 @@ Also provides the next interfaces:
 it uses the Metadata Foundations library, a lot. 
 
 
-### 6       Kanek Storage Foundations (KFSStorage)
+### 7       Kanek Storage Foundations (KFSStorage)
 This layer provides basic functionality for store data into the file system.
 
-#### 6.1        Super Inode
+#### 7.1        Super Inode
 The inode is a data structure which is very well known in traditional file 
 systems. In Kanek Object Storage and Kanek Graph File system, inodes will be
 used. Inodes are very well suited for store data files, however we would be 
@@ -651,11 +692,11 @@ will have the next fields by default, all of them stored in the inode table:
 - Inode link count (not useful for OFS but it is for Graph Storage)
 
 
-#### 6.2        Adding content to inodes.
+#### 7.2        Adding content to inodes.
 In order to add user data to inodes, the data extent pointer will be used.
 It will be pointing to an extent data structure in storage. 
 
-#### 6.3        Adding edges to an inode
+#### 7.3        Adding edges to an inode
 Is basically the same operation that to add directory entries to an inode. 
 However we're in a graph, so entries will be added to both inodes. 
 
@@ -691,7 +732,7 @@ Notice that, same than the inodes and the super block, the links can also have
 a slot ID. 
 
 
-#### 6.4        Graph Storage 
+#### 7.4        Graph Storage 
 Graph Storage Block Device Organization
 Graph storage, in our context has areas on block storage which are very 
 similar to the standard areas in traditional computer file systems. 
@@ -724,13 +765,13 @@ Below we have a representation of Graph Storage.
 +------------------------------+
 ```
 
-#### 6.5        Graph Storage with extern metadata storage
+#### 7.5        Graph Storage with extern metadata storage
 We may have metadata storage in another device/file. For that case, the 
 location for that metadata needs to be stored in some place within the block 
 where the superblock is stored. Also a key to open that metadata storage is
 required. 
 
-#### 6.6        Graph Storage with extern User Files Extents
+#### 7.6        Graph Storage with extern User Files Extents
 In order to store user files in another block device of file, extents storage
 descripted in 2.6 can be used. So we can have a scalable Graph Storage
 with separated metadata storage, user data storage and graph storage. 
@@ -767,7 +808,7 @@ Some of the API calls are posix, others are not.
 - gtrav()          set a link as travesarble
 
 
-### 7       Kanek Storage Service (KFSD)
+### 8        Kanek Storage Service (KFSD)
 This service will handle the graph data structure for the file system.
 It will handle shell context for the processes running in the file system. 
 Among other things, the shell context would handle:
@@ -782,7 +823,7 @@ It should support concurrency, as potentially many clients would be having
 access. 
 
 
-### 8      Kanek Storage tools and utilities ( KFSTools)
+### 9      Kanek Storage tools and utilities ( KFSTools)
 This layer provides binaries for the graph storage 
 shell, and some programs supporting the file system graph data structure. 
 Some binaries:
